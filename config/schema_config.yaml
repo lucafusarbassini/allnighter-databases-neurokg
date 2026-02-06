@@ -1,0 +1,18 @@
+# add your desired knowledge graph components here
+
+gene:
+  represented_as: node
+  preferred_id: uniprot
+  input_label: Gene
+
+quaternary structure:
+  is_a: macromolecular complex
+  represented_as: node
+  input_label: QuaternaryStructure
+
+ligand receptor interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: LigandReceptorInteraction
+  properties:
+    species: str[]
