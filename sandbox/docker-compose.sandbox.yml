@@ -23,7 +23,6 @@ services:
 
     environment:
       - SANDBOX_TIMEOUT_HOURS=${SANDBOX_TIMEOUT_HOURS:-8}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
 
     volumes:
       # Mount project source as READ-ONLY — gets copied into /workspace on start
@@ -32,6 +31,8 @@ services:
       - sandbox-logs:/agent-logs
       # Persistent volume for the agent's home dir (Claude config, history)
       - sandbox-home:/agent-home
+      # Mount Claude credentials (read-only) for Max plan OAuth auth
+      - ${HOME}/.claude/.credentials.json:/agent-home/.claude/.credentials.json:ro
 
     # Resource limits — prevent runaway processes
     deploy:

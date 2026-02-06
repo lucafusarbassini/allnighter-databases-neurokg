@@ -43,13 +43,19 @@ else
 fi
 
 # -------------------------------------------------------
-# 3. Initialize git in workspace if not already a repo
+# 3. Configure git and initialize workspace repo
 # -------------------------------------------------------
+# Set up git identity for the agent
+su-exec agent git config --global user.email "sandbox-agent@allnighter"
+su-exec agent git config --global user.name "Sandbox Agent"
+
 if [ ! -d "${WORKSPACE}/.git" ]; then
     su-exec agent git -C "${WORKSPACE}" init
     su-exec agent git -C "${WORKSPACE}" add -A
     su-exec agent git -C "${WORKSPACE}" commit -m "Sandbox baseline snapshot" 2>/dev/null || true
     log "Git repo initialized in workspace with baseline snapshot."
+else
+    log "Existing git repo found in workspace."
 fi
 
 # -------------------------------------------------------
