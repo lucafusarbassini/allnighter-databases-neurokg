@@ -41,11 +41,8 @@ RUN addgroup -g 1000 agent && \
     addgroup agent docker 2>/dev/null || true
 
 # Create working directories
-RUN mkdir -p /workspace /agent-home /agent-logs && \
-    chown -R agent:agent /workspace /agent-home /agent-logs
-
-# Set up the agent's home directory
-ENV HOME=/agent-home
+RUN mkdir -p /workspace /agent-logs && \
+    chown -R agent:agent /workspace /agent-logs
 
 # Copy entrypoint and helper scripts
 COPY sandbox-entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
