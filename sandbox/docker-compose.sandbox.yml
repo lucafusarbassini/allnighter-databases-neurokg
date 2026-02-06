@@ -1,0 +1,67 @@
+# =============================================================================
+# Claude Agent Overnight Sandbox
+# =============================================================================
+# Usage:
+#   cd sandbox/
+#   docker compose -f docker-compose.sandbox.yml up -d
+#   docker exec -it allnighter-sandbox su-exec agent claude
+#
+# The sandbox copies the project into an isolated workspace. Changes made
+# inside the container do NOT affect your host files unless you explicitly
+# copy them out (see extract-work.sh).
+# =============================================================================
+
+services:
+
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: allnighter-sandbox
+    hostname: allnighter-sandbox
+    privileged: true                       # Required for Docker-in-Docker
+
+    environment:
+      - SANDBOX_TIMEOUT_HOURS=${SANDBOX_TIMEOUT_HOURS:-8}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+    volumes:
+      # Mount project source as READ-ONLY — gets copied into /workspace on start
+      - ../:/project-source:ro
+      # Persistent volume for agent logs (survives container restarts)
+      - sandbox-logs:/agent-logs
+      # Persistent volume for the agent's home dir (Claude config, history)
+      - sandbox-home:/agent-home
+
+    # Resource limits — prevent runaway processes
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+    # No host network access — only internal Docker network
+    networks:
+      - sandbox-net
+
+    # Restart policy: don't auto-restart (watchdog handles lifecycle)
+    restart: "no"
+
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "test", "-f", "/agent-logs/sandbox.log"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  sandbox-net:
+    driver: bridge
+    internal: false   # Set to true to fully block internet (agent won't be able to call Claude API)
+
+volumes:
+  sandbox-logs:
+  sandbox-home:

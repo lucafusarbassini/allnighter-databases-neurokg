@@ -135,3 +135,7 @@ dmypy.json
 
 # data files
 template_package/data/
+
+# Sandbox secrets and artifacts
+sandbox/.env
+sandbox/patches/
