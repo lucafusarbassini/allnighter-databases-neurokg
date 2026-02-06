@@ -29,10 +29,9 @@ services:
       - ../:/project-source:ro
       # Persistent volume for agent logs (survives container restarts)
       - sandbox-logs:/agent-logs
-      # Persistent volume for the agent's home dir (Claude config, history)
-      - sandbox-home:/agent-home
-      # Mount Claude credentials (read-only) for Max plan OAuth auth
-      - ${HOME}/.claude/.credentials.json:/agent-home/.claude/.credentials.json:ro
+      # Mount Claude auth directory (read-only) for Max plan OAuth auth
+      # This includes credentials, session tokens, and other auth state
+      - ${HOME}/.claude:/agent-home/.claude:ro
 
     # Resource limits — prevent runaway processes
     deploy:
