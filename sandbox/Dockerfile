@@ -36,9 +36,8 @@ RUN pip3 install --break-system-packages poetry
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create a non-root user for the agent
-# Use UID 268213 to match the host user for .claude directory access
-RUN addgroup -g 268213 agent && \
-    adduser -D -u 268213 -G agent -s /bin/bash agent && \
+RUN addgroup -g 1000 agent && \
+    adduser -D -u 1000 -G agent -s /bin/bash agent && \
     addgroup agent docker 2>/dev/null || true
 
 # Create working directories

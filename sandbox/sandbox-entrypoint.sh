@@ -43,7 +43,20 @@ else
 fi
 
 # -------------------------------------------------------
-# 3. Configure git and initialize workspace repo
+# 3. Copy Claude credentials with proper permissions
+# -------------------------------------------------------
+if [ -d "/claude-source" ] && [ "$(ls -A /claude-source 2>/dev/null)" ]; then
+    log "Copying Claude credentials to agent home..."
+    mkdir -p /home/agent/.claude
+    cp -a /claude-source/. /home/agent/.claude/
+    chown -R agent:agent /home/agent/.claude
+    log "Claude credentials copied."
+else
+    log "WARNING: No Claude credentials mounted. Agent may not be able to authenticate."
+fi
+
+# -------------------------------------------------------
+# 4. Configure git and initialize workspace repo
 # -------------------------------------------------------
 # Set up git identity for the agent
 su-exec agent git config --global user.email "sandbox-agent@allnighter"
@@ -59,14 +72,14 @@ else
 fi
 
 # -------------------------------------------------------
-# 4. Start the watchdog timer
+# 5. Start the watchdog timer
 # -------------------------------------------------------
 log "Starting watchdog (auto-shutdown in ${SANDBOX_TIMEOUT_HOURS}h)..."
 /usr/local/bin/watchdog.sh &
 WATCHDOG_PID=$!
 
 # -------------------------------------------------------
-# 5. Drop to agent user and run Claude or keep alive
+# 6. Drop to agent user and run Claude or keep alive
 # -------------------------------------------------------
 log "=== Sandbox Ready ==="
 log "To attach: docker exec -it allnighter-sandbox bash"

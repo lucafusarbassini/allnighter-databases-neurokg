@@ -29,9 +29,8 @@ services:
       - ../:/project-source:ro
       # Persistent volume for agent logs (survives container restarts)
       - sandbox-logs:/agent-logs
-      # Mount Claude auth directory (read-only) for Max plan OAuth auth
-      # Agent user's home is /home/agent, so mount there
-      - ${HOME}/.claude:/home/agent/.claude:ro
+      # Mount Claude auth directory to temp location — entrypoint will copy it with proper perms
+      - ${HOME}/.claude:/claude-source:ro
 
     # Resource limits — prevent runaway processes
     deploy:
