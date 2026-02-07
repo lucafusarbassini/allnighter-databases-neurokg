@@ -11,6 +11,7 @@ subdirectories). DO NOT write outside or change anything persistent on this mach
 - Use pip or poetry to install dependencies as needed (e.g. `pip install <package>` or `poetry add <package>`).
 - The task is iterative; do not try to "solve everything at once."
 - Keep outputs concise; record state in persistent files, not in chat logs; save intermediate files in checkpoints; provide reports for subsequent iterations and for humans to read after the job is completed.
+- **AUTONOMOUS OPERATION**: This is an unattended overnight process. NEVER ask the user questions. Make all decisions autonomously and document your reasoning in memory.md. If there are multiple reasonable approaches, choose the most logical one based on the task context and prior learnings.
 
 ## Inputs and persistent state
 - Task spec and constraints: `task.md` (fixed, don't change)
