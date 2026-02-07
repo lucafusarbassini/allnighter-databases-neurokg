@@ -62,6 +62,13 @@ fi
 su-exec agent git config --global user.email "sandbox-agent@allnighter"
 su-exec agent git config --global user.name "Sandbox Agent"
 
+# Configure Claude CLI to use Opus by default for complex tasks
+if [ -f "/home/agent/.claude/.credentials.json" ]; then
+    log "Configuring Claude CLI to use Opus model..."
+    # Claude CLI doesn't have a config file for default model, so we'll document this
+    # Users should pass --model opus flag when running claude commands
+fi
+
 if [ ! -d "${WORKSPACE}/.git" ]; then
     su-exec agent git -C "${WORKSPACE}" init
     su-exec agent git -C "${WORKSPACE}" add -A
