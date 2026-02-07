@@ -1,0 +1,2386 @@
+diff --git a/template_package/adapters/abc_atlas_adapter.py b/template_package/adapters/abc_atlas_adapter.py
+index 7386575..dedb4fb 100644
+--- a/template_package/adapters/abc_atlas_adapter.py
++++ b/template_package/adapters/abc_atlas_adapter.py
+@@ -1,9 +1,20 @@
+ """
+ Allen Brain Cell (ABC) Atlas Adapter for BioCypher.
+ 
+-Loads brain cell type taxonomy from Allen Brain Cell Atlas.
++Parses Allen Brain Atlas API JSON files and cell type CSV data.
++Generates:
++- BrainRegion nodes (from allen_brain_structures.json)
++- CellType nodes (from allen_mouse_cell_types.json, p2, and CSV)
++- Gene nodes (from allen_brain_genes.json)
++
++Data files:
++- allen_brain_structures.json (1,327 brain regions)
++- allen_mouse_cell_types.json + p2 (2,333 cell type specimens)
++- allen_brain_genes.json (2,000 genes)
++- allen_cell_types_database.csv (73,348 cell entries)
+ """
+ 
++import csv
+ import json
+ from pathlib import Path
+ from biocypher._logger import logger
+@@ -12,7 +23,10 @@ from biocypher._logger import logger
+ class ABCAtlasAdapter:
+     def __init__(self, data_dir="template_package/data/abc_atlas"):
+         self.data_dir = Path(data_dir)
+-        self.cell_types = []
++        self.brain_structures = []
++        self.cell_type_specimens = []
++        self.genes = []
++        self.csv_cell_types = {}  # deduplicated by cell_type_accession_id
+         self._load_data()
+ 
+     def _sanitize(self, text):
+@@ -23,57 +37,154 @@ class ABCAtlasAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
++    def _load_json_api(self, filename):
++        """Load Allen API JSON (has 'msg' key with list of records)."""
++        path = self.data_dir / filename
++        if not path.exists():
++            logger.warning(f"ABC Atlas: {filename} not found")
++            return []
++        with open(path, 'r', encoding='utf-8') as f:
++            data = json.load(f)
++        if isinstance(data, dict) and 'msg' in data:
++            return data['msg']
++        elif isinstance(data, list):
++            return data
++        return []
++
+     def _load_data(self):
+-        if not self.data_dir.exists():
+-            logger.warning("ABC Atlas: data directory not found")
+-            return
+-        for fpath in list(self.data_dir.glob("*.json")) + list(self.data_dir.glob("*.csv")) + list(self.data_dir.glob("*.tsv")):
+-            try:
+-                if fpath.suffix == '.json':
+-                    with open(fpath, 'r') as f:
+-                        data = json.load(f)
+-                    if isinstance(data, list):
+-                        self.cell_types.extend(data)
+-                    elif isinstance(data, dict) and 'msg' in data:
+-                        self.cell_types.extend(data.get('msg', []))
+-                else:
+-                    with open(fpath, 'r', errors='replace') as f:
+-                        first = f.readline()
+-                        if first.startswith('<'):
+-                            continue
+-                        f.seek(0)
+-                        header = None
+-                        for line in f:
+-                            parts = line.strip().split('\t' if fpath.suffix == '.tsv' else ',')
+-                            if header is None:
+-                                header = parts
+-                                continue
+-                            if len(parts) >= 2:
+-                                self.cell_types.append(dict(zip(header, parts)))
+-            except Exception as e:
+-                logger.warning(f"ABC Atlas: Error reading {fpath}: {e}")
+-        logger.info(f"ABC Atlas: Loaded {len(self.cell_types)} cell types")
++        """Load all Allen Brain Atlas data files."""
++        # Brain structures
++        self.brain_structures = self._load_json_api('allen_brain_structures.json')
++        logger.info(f"ABC Atlas: Loaded {len(self.brain_structures)} brain structures")
++
++        # Cell type specimens (two pages)
++        p1 = self._load_json_api('allen_mouse_cell_types.json')
++        p2 = self._load_json_api('allen_mouse_cell_types_p2.json')
++        self.cell_type_specimens = p1 + p2
++        logger.info(f"ABC Atlas: Loaded {len(self.cell_type_specimens)} cell type specimens")
++
++        # Genes
++        self.genes = self._load_json_api('allen_brain_genes.json')
++        logger.info(f"ABC Atlas: Loaded {len(self.genes)} genes")
++
++        # CSV cell types (deduplicate by cell_type_accession_id)
++        csv_path = self.data_dir / 'allen_cell_types_database.csv'
++        if csv_path.exists():
++            with open(csv_path, 'r', encoding='utf-8', errors='replace') as f:
++                reader = csv.DictReader(f)
++                for row in reader:
++                    ct_id = row.get('cell_type_accession_id', '').strip()
++                    if ct_id and ct_id not in self.csv_cell_types:
++                        self.csv_cell_types[ct_id] = {
++                            'cell_type_accession_id': ct_id,
++                            'cluster_label': row.get('cluster_label', '').strip(),
++                            'class_label': row.get('class_label', '').strip(),
++                            'subclass_label': row.get('subclass_label', '').strip(),
++                            'neighborhood_label': row.get('neighborhood_label', '').strip(),
++                            'region_label': row.get('region_label', '').strip(),
++                            'cell_type_alias_label': row.get('cell_type_alias_label', '').strip(),
++                            'cell_type_designation_label': row.get('cell_type_designation_label', '').strip(),
++                            'cluster_color': row.get('cluster_color', '').strip(),
++                        }
++            logger.info(f"ABC Atlas: Loaded {len(self.csv_cell_types)} unique cell types from CSV")
+ 
+     def get_nodes(self):
+-        logger.info("ABC Atlas: Generating CellType nodes...")
+-        count = 0
+-        for ct in self.cell_types:
+-            ct_id = ct.get('cell_type_accession_id', ct.get('id', ct.get('cell_set_accession', '')))
+-            if not ct_id:
++        """
++        Yield BrainRegion nodes, CellType nodes, and Gene nodes.
++        Each: (id, label, properties)
++        """
++        # --- BrainRegion nodes ---
++        logger.info("ABC Atlas: Generating BrainRegion nodes...")
++        br_count = 0
++        for s in self.brain_structures:
++            sid = s.get('id')
++            if sid is None:
+                 continue
+-            name = ct.get('cell_type_name', ct.get('label', ct.get('cell_set_label', '')))
+             props = {
+-                'name': self._sanitize(name),
+-                'definition': self._sanitize(ct.get('cell_type_description', ct.get('cell_set_description', ''))),
+-                'synonyms': '',
+-                'xrefs': '',
+-                'source': 'ABC Atlas',
++                'name': self._sanitize(s.get('name', '')),
++                'acronym': self._sanitize(s.get('acronym', '')),
++                'color_hex': self._sanitize(s.get('color_hex_triplet', '')),
++                'graph_order': s.get('graph_order', 0),
++                'structure_level': s.get('st_level', 0),
++                'depth': s.get('depth', 0),
++                'parent_structure_id': s.get('parent_structure_id'),
++                'structure_id_path': self._sanitize(s.get('structure_id_path', '')),
++                'ontology_id': s.get('ontology_id', 0),
++                'hemisphere_id': s.get('hemisphere_id', 3),
++                'source': 'Allen Brain Atlas',
++            }
++            yield (f"allen:structure:{sid}", "BrainRegion", props)
++            br_count += 1
++        logger.info(f"ABC Atlas: Generated {br_count} BrainRegion nodes")
++
++        # --- CellType nodes from CSV (deduplicated) ---
++        logger.info("ABC Atlas: Generating CellType nodes from CSV...")
++        ct_count = 0
++        for ct_id, ct in self.csv_cell_types.items():
++            props = {
++                'name': self._sanitize(ct['cluster_label']),
++                'class_label': self._sanitize(ct['class_label']),
++                'subclass_label': self._sanitize(ct['subclass_label']),
++                'neighborhood_label': self._sanitize(ct['neighborhood_label']),
++                'region': self._sanitize(ct['region_label']),
++                'alias': self._sanitize(ct['cell_type_alias_label']),
++                'designation': self._sanitize(ct['cell_type_designation_label']),
++                'color_hex': self._sanitize(ct['cluster_color']),
++                'source': 'Allen Cell Types Database',
+             }
+             yield (f"abc:{ct_id}", "CellType", props)
+-            count += 1
+-        logger.info(f"ABC Atlas: Generated {count} CellType nodes")
++            ct_count += 1
++        logger.info(f"ABC Atlas: Generated {ct_count} CellType nodes from CSV")
++
++        # --- Gene nodes ---
++        logger.info("ABC Atlas: Generating Gene nodes...")
++        gene_count = 0
++        for g in self.genes:
++            gid = g.get('id')
++            if gid is None:
++                continue
++            props = {
++                'symbol': self._sanitize(g.get('acronym', '')),
++                'name': self._sanitize(g.get('name', '')),
++                'entrez_id': g.get('entrez_id'),
++                'ensembl_id': self._sanitize(g.get('ensembl_id', '') or ''),
++                'chromosome_id': g.get('chromosome_id'),
++                'organism_id': g.get('organism_id'),
++                'version_status': self._sanitize(g.get('version_status', '')),
++                'source': 'Allen Brain Atlas',
++            }
++            yield (f"allen:gene:{gid}", "Gene", props)
++            gene_count += 1
++        logger.info(f"ABC Atlas: Generated {gene_count} Gene nodes")
+ 
+     def get_edges(self):
+-        logger.info("ABC Atlas: No edges")
+-        return
+-        yield
++        """
++        Yield CellTypeSpecimen edges linking specimens to donor/species context.
++        Each: (id, source, target, label, properties)
++        """
++        logger.info("ABC Atlas: Generating CellTypeSpecimen edges...")
++        count = 0
++        for spec in self.cell_type_specimens:
++            spec_id = spec.get('specimen__id')
++            donor_id = spec.get('donor__id')
++            if not spec_id or not donor_id:
++                continue
++            species = self._sanitize(spec.get('donor__species', ''))
++            props = {
++                'donor_name': self._sanitize(spec.get('donor__name', '')),
++                'donor_sex': self._sanitize(spec.get('donor__sex', '')),
++                'donor_age': self._sanitize(spec.get('donor__age', '')),
++                'species': species,
++                'disease_state': self._sanitize(spec.get('donor__disease_state', '')),
++                'cell_reporter_status': self._sanitize(spec.get('cell_reporter_status', '') or ''),
++                'source': 'Allen Cell Types',
++            }
++            yield (
++                f"allen:specimen:{spec_id}",
++                f"allen:specimen:{spec_id}",
++                f"allen:donor:{donor_id}",
++                "CellTypeSpecimen",
++                props,
++            )
++            count += 1
++        logger.info(f"ABC Atlas: Generated {count} CellTypeSpecimen edges")
+diff --git a/template_package/adapters/cistrome_adapter.py b/template_package/adapters/cistrome_adapter.py
+index 013d3ea..bcc2f6b 100644
+--- a/template_package/adapters/cistrome_adapter.py
++++ b/template_package/adapters/cistrome_adapter.py
+@@ -1,10 +1,12 @@
+ """
+ Cistrome Data Browser (ChIP-Seq) Adapter for BioCypher.
+ 
+-Loads TF ChIP-Seq binding data.
+-- TFTargetInteraction edges (reuses ChEA3 schema)
++Parses cistrome_dc2_samples.tsv, cistrome_dc2_samples.json, and
++cistrome_dc2_extended_samples.json to yield ChIPSeqSample nodes
++with transcription factor, cell type, tissue, and disease metadata.
+ """
+ 
++import json
+ from pathlib import Path
+ from biocypher._logger import logger
+ 
+@@ -12,74 +14,154 @@ from biocypher._logger import logger
+ class CistromeAdapter:
+     def __init__(self, data_dir="template_package/data/cistrome"):
+         self.data_dir = Path(data_dir)
+-        self.entries = []
++        self.samples = {}   # id -> sample dict (deduplicated)
+         self._load_data()
+ 
+-    def _sanitize(self, text):
++    # ------------------------------------------------------------------
++    # helpers
++    # ------------------------------------------------------------------
++    @staticmethod
++    def _sanitize(text):
+         if text is None:
+             return ""
+         text = str(text)
+         text = text.replace('"', '""')
+-        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+         return text.strip()
+ 
++    # ------------------------------------------------------------------
++    # loading
++    # ------------------------------------------------------------------
+     def _load_data(self):
+         if not self.data_dir.exists():
+             logger.warning("Cistrome: data directory not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv"))
+-                      + list(self.data_dir.glob("*.txt"))
+-                      + list(self.data_dir.glob("*.bed")))
+-        for fpath in candidates:
+-            try:
+-                with open(fpath, 'r', errors='replace') as f:
+-                    first = f.readline()
+-                    if first.startswith('<'):
+-                        continue
+-                    f.seek(0)
+-                    self._parse_file(f)
+-            except Exception as e:
+-                logger.warning(f"Cistrome: Error reading {fpath}: {e}")
+-        logger.info(f"Cistrome: Loaded {len(self.entries)} entries")
++        self._load_tsv()
++        self._load_json(self.data_dir / "cistrome_dc2_samples.json")
++        self._load_json(self.data_dir / "cistrome_dc2_extended_samples.json")
++        logger.info(f"Cistrome: Loaded {len(self.samples)} unique samples")
+ 
+-    def _parse_file(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line:
+-                continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) < 2:
+-                continue
+-            row = dict(zip(header, parts))
+-            tf = row.get('Factor', row.get('TF', row.get('factor', '')))
+-            cell_line = row.get('Cell_line', row.get('cell_type', ''))
+-            if not tf:
++    def _load_tsv(self):
++        """Parse cistrome_dc2_samples.tsv."""
++        fpath = self.data_dir / "cistrome_dc2_samples.tsv"
++        if not fpath.exists():
++            return
++        with open(fpath, "r", errors="replace") as fh:
++            header = None
++            for line in fh:
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split("\t")
++                if header is None:
++                    header = parts
++                    continue
++                if len(parts) < 2:
++                    continue
++                row = dict(zip(header, parts))
++                sid = row.get("id", "")
++                if not sid:
++                    continue
++                self.samples[str(sid)] = {
++                    "id":        sid,
++                    "factor":    row.get("factor", ""),
++                    "cell_line": row.get("cell_line", ""),
++                    "cell_type": row.get("cell_type", ""),
++                    "tissue":    row.get("tissue", ""),
++                    "species":   row.get("species", ""),
++                    "disease":   row.get("disease", ""),
++                    "geo_id":    row.get("geo_id", ""),
++                    "pmid":      row.get("pmid", ""),
++                    "journal":   row.get("journal", ""),
++                    "lab":       row.get("lab", ""),
++                    "peaks":     row.get("peaks", ""),
++                    "frip":      row.get("frip", ""),
++                }
++
++    def _load_json(self, fpath):
++        """Parse a JSON sample list -- merges with existing entries."""
++        if not fpath.exists():
++            return
++        with open(fpath, "r", errors="replace") as fh:
++            data = json.load(fh)
++        if not isinstance(data, list):
++            return
++        for rec in data:
++            sid = str(rec.get("id", ""))
++            if not sid:
+                 continue
+-            self.entries.append({
+-                'tf': tf,
+-                'cell_line': cell_line,
+-                'species': row.get('Species', 'Human'),
+-            })
++            if sid in self.samples:
++                # merge any extra keys from JSON that TSV may lack
++                for k, v in rec.items():
++                    key = str(k)
++                    if key not in self.samples[sid] or not self.samples[sid][key]:
++                        self.samples[sid][key] = v
++            else:
++                self.samples[sid] = {
++                    "id":        sid,
++                    "factor":    rec.get("factor", ""),
++                    "cell_line": rec.get("cell_line", ""),
++                    "cell_type": rec.get("cell_type", ""),
++                    "tissue":    rec.get("tissue", ""),
++                    "species":   rec.get("species", ""),
++                    "disease":   rec.get("disease", ""),
++                    "geo_id":    rec.get("geo_id", ""),
++                    "pmid":      rec.get("pmid", ""),
++                    "journal":   rec.get("journal", ""),
++                    "lab":       rec.get("lab", ""),
++                    "peaks":     rec.get("peaks", ""),
++                    "frip":      rec.get("frip", ""),
++                }
+ 
++    # ------------------------------------------------------------------
++    # BioCypher interface
++    # ------------------------------------------------------------------
+     def get_nodes(self):
+-        logger.info("Cistrome: No dedicated nodes")
+-        return
+-        yield
++        """Yield ChIPSeqSample nodes."""
++        logger.info("Cistrome: Generating ChIPSeqSample nodes...")
++        count = 0
++        for sid, s in sorted(self.samples.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
++            node_id = f"cistrome:{sid}"
++            props = {
++                "factor":    self._sanitize(s.get("factor", "")),
++                "cell_line": self._sanitize(s.get("cell_line", "")),
++                "cell_type": self._sanitize(s.get("cell_type", "")),
++                "tissue":    self._sanitize(s.get("tissue", "")),
++                "species":   self._sanitize(s.get("species", "")),
++                "disease":   self._sanitize(s.get("disease", "")),
++                "geo_id":    self._sanitize(s.get("geo_id", "")),
++                "pmid":      self._sanitize(str(s.get("pmid", ""))),
++                "journal":   self._sanitize(s.get("journal", "")),
++                "lab":       self._sanitize(s.get("lab", "")),
++                "peaks":     int(s["peaks"]) if str(s.get("peaks", "")).isdigit() else 0,
++                "frip":      self._sanitize(str(s.get("frip", ""))),
++                "source":    "Cistrome",
++            }
++            yield (node_id, "chip-seq sample", props)
++            count += 1
++        logger.info(f"Cistrome: Generated {count} ChIPSeqSample nodes")
+ 
+     def get_edges(self):
+-        logger.info("Cistrome: Generating TFTargetInteraction edges...")
++        """
++        Yield 'tf chip-seq binding' edges: TF factor -> sample.
++        This links each transcription factor to the sample that profiled it.
++        """
++        logger.info("Cistrome: Generating TF binding edges...")
+         count = 0
+-        for entry in self.entries:
++        for sid, s in sorted(self.samples.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 0):
++            factor = s.get("factor", "")
++            if not factor:
++                continue
++            sample_node = f"cistrome:{sid}"
++            edge_id = f"cistrome:edge_{sid}"
+             props = {
+-                'library': 'Cistrome',
+-                'experiment': self._sanitize(entry.get('cell_line', '')),
+-                'source': 'Cistrome',
++                "cell_line": self._sanitize(s.get("cell_line", "")),
++                "cell_type": self._sanitize(s.get("cell_type", "")),
++                "tissue":    self._sanitize(s.get("tissue", "")),
++                "disease":   self._sanitize(s.get("disease", "")),
++                "peaks":     int(s["peaks"]) if str(s.get("peaks", "")).isdigit() else 0,
++                "source":    "Cistrome",
+             }
+-            yield (None, entry['tf'], f"cistrome:{entry['tf']}_{count}",
+-                   "TFTargetInteraction", props)
++            yield (edge_id, self._sanitize(factor), sample_node, "tf chip-seq binding", props)
+             count += 1
+-        logger.info(f"Cistrome: Generated {count} TFTargetInteraction edges")
++        logger.info(f"Cistrome: Generated {count} TF binding edges")
+diff --git a/template_package/adapters/cyclebase_adapter.py b/template_package/adapters/cyclebase_adapter.py
+index 9501330..910a0b0 100644
+--- a/template_package/adapters/cyclebase_adapter.py
++++ b/template_package/adapters/cyclebase_adapter.py
+@@ -1,8 +1,10 @@
+ """
+ Cyclebase (Cell Cycle Regulation) Adapter for BioCypher.
+ 
+-Loads cell cycle timing/regulation data.
+-- CellCycleRegulation edges
++Parses UniProt-derived TSV files containing cell cycle, cell division,
++and CDK/cyclin protein annotations.
++
++Yields CellCycleRegulation edges linking proteins to cell cycle phases/functions.
+ """
+ 
+ from pathlib import Path
+@@ -13,6 +15,7 @@ class CyclebaseAdapter:
+     def __init__(self, data_dir="template_package/data/cyclebase"):
+         self.data_dir = Path(data_dir)
+         self.entries = []
++        self._seen_keys = set()
+         self._load_data()
+ 
+     def _sanitize(self, text):
+@@ -23,50 +26,123 @@ class CyclebaseAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
++    def _extract_phase_from_keywords(self, keywords_str):
++        """Extract cell cycle phase keywords from the Keywords field."""
++        if not keywords_str:
++            return ""
++        kw_lower = keywords_str.lower()
++        phases = []
++        phase_terms = [
++            "cell cycle", "cell division", "mitosis", "meiosis",
++            "g1/s", "g2/m", "s phase", "m phase",
++            "apoptosis", "dna damage", "dna repair",
++            "kinetochore", "centromere", "chromosome",
++        ]
++        for term in phase_terms:
++            if term in kw_lower:
++                phases.append(term)
++        return "; ".join(phases) if phases else "cell cycle"
++
++    def _extract_function_summary(self, function_text):
++        """Extract first sentence of FUNCTION annotation."""
++        if not function_text:
++            return ""
++        text = function_text
++        if text.startswith("FUNCTION: "):
++            text = text[len("FUNCTION: "):]
++        # Take first sentence (up to first period followed by space or end)
++        dot_pos = text.find('. ')
++        if dot_pos > 0:
++            text = text[:dot_pos + 1]
++        elif len(text) > 200:
++            text = text[:200] + "..."
++        return text
++
++    def _classify_dataset(self, filename):
++        """Return a category label based on the source filename."""
++        fn = filename.lower()
++        if "cdk_cyclin" in fn:
++            return "CDK/cyclin"
++        elif "celldivision" in fn:
++            return "cell_division"
++        elif "reviewed" in fn:
++            return "cell_cycle_reviewed"
++        else:
++            return "cell_cycle"
++
+     def _load_data(self):
+         if not self.data_dir.exists():
+             logger.warning("Cyclebase: data directory not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv"))
+-                      + list(self.data_dir.glob("*.txt"))
+-                      + list(self.data_dir.glob("*.csv")))
+-        for fpath in candidates:
++
++        file_map = {
++            "uniprot_cellcycle_human.tsv": "cell_cycle",
++            "uniprot_cellcycle_reviewed.tsv": "cell_cycle_reviewed",
++            "uniprot_celldivision_human.tsv": "cell_division",
++            "uniprot_cdk_cyclins_human.tsv": "CDK/cyclin",
++        }
++
++        for fname, dataset in file_map.items():
++            fpath = self.data_dir / fname
++            if not fpath.exists():
++                logger.warning(f"Cyclebase: {fname} not found, skipping")
++                continue
+             try:
+-                with open(fpath, 'r', errors='replace') as f:
+-                    first = f.readline()
+-                    if first.startswith('<'):
+-                        continue
+-                    f.seek(0)
+-                    self._parse_file(f)
++                self._parse_tsv(fpath, dataset)
+             except Exception as e:
+                 logger.warning(f"Cyclebase: Error reading {fpath}: {e}")
+-        logger.info(f"Cyclebase: Loaded {len(self.entries)} entries")
+ 
+-    def _parse_file(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line:
+-                continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) < 2:
+-                continue
+-            row = dict(zip(header, parts))
+-            gene = row.get('gene_name', row.get('Gene', row.get('symbol', '')))
+-            phase = row.get('peaktime', row.get('phase', row.get('Peak', '')))
+-            if not gene:
+-                continue
+-            self.entries.append({
+-                'gene': gene,
+-                'phase': phase,
+-                'periodicity': row.get('periodicity_score', row.get('score', '')),
+-            })
++        logger.info(f"Cyclebase: Loaded {len(self.entries)} unique entries")
++
++    def _parse_tsv(self, fpath, dataset):
++        """Parse a UniProt-format TSV file."""
++        with open(fpath, 'r', errors='replace') as fh:
++            header_line = fh.readline().strip()
++            if not header_line or header_line.startswith('<'):
++                return
++            headers = header_line.split('\t')
++
++            for line in fh:
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split('\t')
++                row = dict(zip(headers, parts))
++
++                uniprot_id = row.get('Entry', '').strip()
++                if not uniprot_id:
++                    continue
++
++                # Extract gene name (first gene in the "Gene Names" field)
++                gene_names_raw = row.get('Gene Names', '').strip()
++                gene_name = gene_names_raw.split()[0] if gene_names_raw else ""
++
++                # Dedup by (uniprot_id, dataset)
++                dedup_key = (uniprot_id, dataset)
++                if dedup_key in self._seen_keys:
++                    continue
++                self._seen_keys.add(dedup_key)
++
++                keywords = row.get('Keywords', '').strip()
++                phase = self._extract_phase_from_keywords(keywords)
++                go_bp = row.get('Gene Ontology (biological process)', '').strip()
++                function_cc = row.get('Function [CC]', '').strip()
++                func_summary = self._extract_function_summary(function_cc)
++                protein_name = row.get('Protein names', '').strip()
++
++                self.entries.append({
++                    'uniprot_id': uniprot_id,
++                    'gene_name': gene_name,
++                    'protein_name': protein_name,
++                    'phase': phase,
++                    'function': func_summary,
++                    'keywords': keywords,
++                    'go_bp': go_bp,
++                    'dataset': dataset,
++                })
+ 
+     def get_nodes(self):
+-        logger.info("Cyclebase: No dedicated nodes")
++        logger.info("Cyclebase: No dedicated nodes (proteins referenced by UniProt ID)")
+         return
+         yield
+ 
+@@ -74,12 +150,21 @@ class CyclebaseAdapter:
+         logger.info("Cyclebase: Generating CellCycleRegulation edges...")
+         count = 0
+         for entry in self.entries:
++            edge_id = f"cyclebase:{entry['uniprot_id']}_{entry['dataset']}"
++            source_id = entry['uniprot_id']
++            target_id = f"cellcycle:{entry['dataset']}"
++
+             props = {
+-                'cell_cycle_phase': self._sanitize(entry['phase']),
+-                'periodicity_score': self._sanitize(entry.get('periodicity', '')),
++                'phase': self._sanitize(entry['phase']),
++                'function': self._sanitize(entry['function']),
++                'gene_name': self._sanitize(entry['gene_name']),
++                'protein_name': self._sanitize(entry['protein_name']),
++                'keywords': self._sanitize(entry['keywords']),
++                'go_biological_process': self._sanitize(entry['go_bp']),
++                'dataset': entry['dataset'],
+                 'source': 'Cyclebase',
+             }
+-            yield (None, entry['gene'], f"cellcycle:{entry['phase']}",
++            yield (edge_id, source_id, target_id,
+                    "CellCycleRegulation", props)
+             count += 1
+         logger.info(f"Cyclebase: Generated {count} CellCycleRegulation edges")
+diff --git a/template_package/adapters/dbsno_adapter.py b/template_package/adapters/dbsno_adapter.py
+index f235a41..2c7f01e 100644
+--- a/template_package/adapters/dbsno_adapter.py
++++ b/template_package/adapters/dbsno_adapter.py
+@@ -1,11 +1,24 @@
+ """
+ dbSNO (S-Nitrosylation Database) Adapter for BioCypher.
+ 
+-Loads protein S-nitrosylation site data.
+-- ProteinHasPTM edges (S-nitrosylation)
++Loads protein S-nitrosylation site data from multiple sources and generates
++ProteinHasPTM edges (ptm_type = "s-nitrosylation").
++
++Data files parsed (in priority order):
++  1. sno_sites_all_species.csv    -- curated dbSNO sites (CSV, 556 records)
++  2. sno_sites_from_uniprot.csv   -- UniProt-extracted sites (CSV, 78 records)
++  3. uniprot_snitrosocysteine.tsv -- UniProt Modified residue (TSV, 502 proteins)
++  4. uniprot_nitrosylation_ptm.tsv -- UniProt PTM + Modified residue (TSV, 221)
++  5. uniprot_sno_all_species.tsv  -- UniProt all species (TSV, 500 proteins)
++  6. uniprot_snitrosocysteine_human.tsv -- human subset (TSV, 57)
++  7. uniprot_sno_human.tsv        -- human subset (TSV, 58)
++  8. uniprot_sno_human2.tsv       -- human subset (TSV, 149)
++  9. uniprot_sno_ptm_comment.tsv  -- human PTM comment (TSV, 41)
++
++Deduplication key: (uniprot_acc, position).
+ """
+ 
+-import gzip
++import re
+ from pathlib import Path
+ from biocypher._logger import logger
+ 
+@@ -13,10 +26,15 @@ from biocypher._logger import logger
+ class DbSNOAdapter:
+     def __init__(self, data_dir="template_package/data/dbsno"):
+         self.data_dir = Path(data_dir)
+-        self.sites = []
++        self.sites = []          # list of dicts, one per individual SNO site
++        self._seen_keys = set()  # dedup key = (acc, position)
+         self._load_data()
+ 
+-    def _sanitize(self, text):
++    # ------------------------------------------------------------------
++    # helpers
++    # ------------------------------------------------------------------
++    @staticmethod
++    def _sanitize(text):
+         if text is None:
+             return ""
+         text = str(text)
+@@ -24,50 +42,191 @@ class DbSNOAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
++    _MODRES_SNO_RE = re.compile(
++        r'MOD_RES\s+(\d+)\s*;\s*/note="S-nitrosocysteine[^"]*"'
++        r'(?:\s*;\s*/evidence="([^"]*)")?'
++    )
++
++    # ------------------------------------------------------------------
++    # loading
++    # ------------------------------------------------------------------
+     def _load_data(self):
+         if not self.data_dir.exists():
+             logger.warning("dbSNO: data directory not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv"))
+-                      + list(self.data_dir.glob("*.txt"))
+-                      + list(self.data_dir.glob("*.csv")))
+-        for fpath in candidates:
+-            try:
+-                with open(fpath, 'r', errors='replace') as f:
+-                    first = f.readline()
+-                    if first.startswith('<'):
++
++        # 1. Curated CSV files (dbSNO-specific format)
++        for csv_name in ["sno_sites_all_species.csv", "sno_sites_from_uniprot.csv"]:
++            fpath = self.data_dir / csv_name
++            if fpath.exists():
++                try:
++                    self._parse_dbsno_csv(fpath)
++                except Exception as e:
++                    logger.warning(f"dbSNO: Error reading {csv_name}: {e}")
++
++        # 2. UniProt TSV files containing Modified residue / Lipidation columns
++        tsv_files = [
++            "uniprot_snitrosocysteine.tsv",
++            "uniprot_nitrosylation_ptm.tsv",
++            "uniprot_sno_all_species.tsv",
++            "uniprot_snitrosocysteine_human.tsv",
++            "uniprot_sno_human.tsv",
++            "uniprot_sno_human2.tsv",
++            "uniprot_sno_ptm_comment.tsv",
++        ]
++        for tsv_name in tsv_files:
++            fpath = self.data_dir / tsv_name
++            if fpath.exists():
++                try:
++                    self._parse_uniprot_tsv(fpath)
++                except Exception as e:
++                    logger.warning(f"dbSNO: Error reading {tsv_name}: {e}")
++
++        logger.info(
++            f"dbSNO: Loaded {len(self.sites)} S-nitrosylation sites "
++            f"from {len({s['acc'] for s in self.sites})} proteins"
++        )
++
++    def _parse_dbsno_csv(self, fpath):
++        """Parse a dbSNO curated CSV (comma-separated, with header).
++
++        Expected columns: uniprot_id, gene_name, [organism,] protein_name,
++        position, modification, evidence
++        """
++        with open(fpath, "r", errors="replace") as fh:
++            header_line = fh.readline()
++            if header_line.startswith("<"):
++                return
++            headers = [h.strip() for h in header_line.rstrip("\n").split(",")]
++            col = {h: i for i, h in enumerate(headers)}
++
++            acc_idx = col.get("uniprot_id")
++            gene_idx = col.get("gene_name")
++            pos_idx = col.get("position")
++            mod_idx = col.get("modification")
++            ev_idx = col.get("evidence")
++            org_idx = col.get("organism")
++            prot_idx = col.get("protein_name")
++
++            if acc_idx is None or pos_idx is None:
++                return
++
++            for line in fh:
++                # Handle quoted fields (evidence may contain commas)
++                parts = self._split_csv_line(line.rstrip("\n"))
++                if len(parts) <= max(acc_idx, pos_idx):
++                    continue
++
++                acc = parts[acc_idx].strip()
++                position = parts[pos_idx].strip()
++                if not acc or not position:
++                    continue
++
++                key = (acc, position)
++                if key in self._seen_keys:
++                    continue
++                self._seen_keys.add(key)
++
++                gene = parts[gene_idx].strip() if gene_idx is not None and gene_idx < len(parts) else ""
++                organism = parts[org_idx].strip() if org_idx is not None and org_idx < len(parts) else ""
++                evidence = parts[ev_idx].strip() if ev_idx is not None and ev_idx < len(parts) else ""
++
++                # Extract PMIDs from evidence strings like "ECO:...|PubMed:12345"
++                pmids = self._extract_pmids(evidence)
++
++                self.sites.append({
++                    "acc": acc,
++                    "gene": gene,
++                    "position": position,
++                    "organism": organism,
++                    "pmids": pmids,
++                    "evidence": evidence,
++                    "source_file": fpath.name,
++                })
++
++    @staticmethod
++    def _split_csv_line(line):
++        """Simple CSV split that respects double-quoted fields."""
++        result = []
++        current = []
++        in_quotes = False
++        for ch in line:
++            if ch == '"':
++                in_quotes = not in_quotes
++            elif ch == ',' and not in_quotes:
++                result.append(''.join(current))
++                current = []
++            else:
++                current.append(ch)
++        result.append(''.join(current))
++        return result
++
++    def _parse_uniprot_tsv(self, fpath):
++        """Parse a UniProt-style TSV that has Entry/Gene Names columns and a
++        Modified residue column containing MOD_RES annotations.  Only
++        S-nitrosocysteine sites are extracted."""
++        with open(fpath, "r", errors="replace") as fh:
++            header_line = fh.readline()
++            if header_line.startswith("<"):
++                return
++            headers = header_line.rstrip("\n").split("\t")
++            col = {h.strip(): i for i, h in enumerate(headers)}
++
++            acc_idx = col.get("Entry")
++            gene_idx = col.get("Gene Names")
++            modres_idx = col.get("Modified residue")
++            organism_idx = col.get("Organism")
++
++            if acc_idx is None or modres_idx is None:
++                return
++
++            for line in fh:
++                parts = line.rstrip("\n").split("\t")
++                if len(parts) <= max(acc_idx, modres_idx):
++                    continue
++
++                acc = parts[acc_idx].strip()
++                if not acc:
++                    continue
++
++                modres_field = parts[modres_idx]
++                gene_raw = parts[gene_idx].strip() if gene_idx is not None and gene_idx < len(parts) else ""
++                gene = gene_raw.split()[0] if gene_raw else ""
++                organism = parts[organism_idx].strip() if organism_idx is not None and organism_idx < len(parts) else ""
++
++                for m in self._MODRES_SNO_RE.finditer(modres_field):
++                    position = m.group(1)
++                    evidence = m.group(2) or ""
++                    key = (acc, position)
++                    if key in self._seen_keys:
+                         continue
+-                    f.seek(0)
+-                    self._parse_file(f)
+-            except Exception as e:
+-                logger.warning(f"dbSNO: Error reading {fpath}: {e}")
+-        logger.info(f"dbSNO: Loaded {len(self.sites)} S-nitrosylation sites")
+-
+-    def _parse_file(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line:
+-                continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) < 2:
+-                continue
+-            row = dict(zip(header, parts))
+-            acc = row.get('UniProtKB_AC', row.get('uniprot', row.get('Protein', '')))
+-            position = row.get('Position', row.get('position', ''))
+-            if not acc:
+-                continue
+-            self.sites.append({
+-                'acc': acc,
+-                'position': position,
+-                'pmid': row.get('PMID', row.get('Reference', '')),
+-            })
++                    self._seen_keys.add(key)
++
++                    pmids = self._extract_pmids(evidence)
++
++                    self.sites.append({
++                        "acc": acc,
++                        "gene": gene,
++                        "position": position,
++                        "organism": organism,
++                        "pmids": pmids,
++                        "evidence": evidence,
++                        "source_file": fpath.name,
++                    })
++
++    @staticmethod
++    def _extract_pmids(evidence_str):
++        """Pull PubMed IDs from evidence strings."""
++        if not evidence_str:
++            return ""
++        pmids = re.findall(r'PubMed:(\d+)', evidence_str)
++        return ";".join(sorted(set(pmids)))
+ 
++    # ------------------------------------------------------------------
++    # BioCypher interface
++    # ------------------------------------------------------------------
+     def get_nodes(self):
+-        logger.info("dbSNO: No dedicated nodes")
++        logger.info("dbSNO: No dedicated nodes (uses existing protein nodes)")
+         return
+         yield
+ 
+@@ -75,16 +234,19 @@ class DbSNOAdapter:
+         logger.info("dbSNO: Generating ProteinHasPTM edges (S-nitrosylation)...")
+         count = 0
+         for site in self.sites:
+-            site_id = f"dbsno:{site['acc']}_{site['position']}"
++            edge_id = f"dbsno:{site['acc']}_C{site['position']}"
++            target = site["gene"] if site["gene"] else site["acc"]
+             props = {
+-                'site': self._sanitize(site['position']),
+-                'ptm_type': 'S-Nitrosylation',
+-                'residue': 'Cys',
+-                'score': 0,
+-                'enzymes': '',
+-                'pmids': self._sanitize(site.get('pmid', '')),
+-                'source': 'dbSNO',
++                "site": self._sanitize(site["position"]),
++                "ptm_type": "s-nitrosylation",
++                "residue": "Cys",
++                "score": 0,
++                "enzymes": "",
++                "pmids": self._sanitize(site["pmids"]),
++                "source": "dbSNO",
++                "organism": self._sanitize(site["organism"]),
++                "evidence": self._sanitize(site["evidence"]),
+             }
+-            yield (None, site['acc'], site_id, "ProteinHasPTM", props)
++            yield (None, site["acc"], target, "ProteinHasPTM", props)
+             count += 1
+         logger.info(f"dbSNO: Generated {count} ProteinHasPTM edges")
+diff --git a/template_package/adapters/hichipdb_adapter.py b/template_package/adapters/hichipdb_adapter.py
+index 41cd0ec..dc2ecfc 100644
+--- a/template_package/adapters/hichipdb_adapter.py
++++ b/template_package/adapters/hichipdb_adapter.py
+@@ -1,11 +1,11 @@
+ """
+ HiChIPdb (3D Regulatory Interactions) Adapter for BioCypher.
+ 
+-Loads HiChIP chromatin interaction data.
+-- Regulatory interaction edges
++Parses BEDPE chromatin loop files and ENCODE metadata to yield
++ChromatinInteraction edges between two genomic loci.
+ """
+ 
+-import gzip
++import json
+ from pathlib import Path
+ from biocypher._logger import logger
+ 
+@@ -13,91 +13,169 @@ from biocypher._logger import logger
+ class HiChIPdbAdapter:
+     def __init__(self, data_dir="template_package/data/hichipdb"):
+         self.data_dir = Path(data_dir)
+-        self.interactions = []
++        self.loops = []
++        self.metadata = {}       # accession -> metadata dict
++        self.fourdn_info = []    # 4DN experiment records
+         self._load_data()
+ 
+-    def _sanitize(self, text):
++    # ------------------------------------------------------------------
++    # helpers
++    # ------------------------------------------------------------------
++    @staticmethod
++    def _sanitize(text):
+         if text is None:
+             return ""
+         text = str(text)
+         text = text.replace('"', '""')
+-        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+         return text.strip()
+ 
++    @staticmethod
++    def _locus_id(chrom, start, end):
++        """Canonical locus identifier."""
++        return f"{chrom}:{start}-{end}"
++
++    # ------------------------------------------------------------------
++    # loading
++    # ------------------------------------------------------------------
+     def _load_data(self):
+         if not self.data_dir.exists():
+             logger.warning("HiChIPdb: data directory not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv.gz"))
+-                      + list(self.data_dir.glob("*.tsv"))
+-                      + list(self.data_dir.glob("*.txt"))
+-                      + list(self.data_dir.glob("*.bed")))
+-        for fpath in candidates:
++        self._load_metadata()
++        self._load_fourdn()
++        self._load_bedpe_files()
++        logger.info(
++            f"HiChIPdb: Loaded {len(self.loops)} loops, "
++            f"{len(self.metadata)} ENCODE metadata entries, "
++            f"{len(self.fourdn_info)} 4DN experiments"
++        )
++
++    def _load_metadata(self):
++        """Parse encode_loops_metadata.tsv."""
++        fpath = self.data_dir / "encode_loops_metadata.tsv"
++        if not fpath.exists():
++            return
++        with open(fpath, "r", errors="replace") as fh:
++            header = None
++            for line in fh:
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split("\t")
++                if header is None:
++                    header = parts
++                    continue
++                row = dict(zip(header, parts))
++                acc = row.get("file_accession", "")
++                if acc:
++                    self.metadata[acc] = row
++
++    def _load_fourdn(self):
++        """Parse fourdn_hichip_experiments.json."""
++        fpath = self.data_dir / "fourdn_hichip_experiments.json"
++        if not fpath.exists():
++            return
++        with open(fpath, "r", errors="replace") as fh:
++            data = json.load(fh)
++            if isinstance(data, list):
++                self.fourdn_info = data
++            elif isinstance(data, dict):
++                self.fourdn_info = data.get("results", data.get("@graph", [data]))
++
++    def _load_bedpe_files(self):
++        """Parse all *.bedpe files in the data directory."""
++        for fpath in sorted(self.data_dir.glob("*.bedpe")):
+             try:
+-                if str(fpath).endswith('.gz'):
+-                    with gzip.open(fpath, 'rt', errors='replace') as f:
+-                        first = f.readline()
+-                        if first.startswith('<'):
+-                            continue
+-                        f.seek(0)
+-                        self._parse_file(f)
+-                else:
+-                    with open(fpath, 'r', errors='replace') as f:
+-                        first = f.readline()
+-                        if first.startswith('<'):
+-                            continue
+-                        f.seek(0)
+-                        self._parse_file(f)
+-            except Exception as e:
+-                logger.warning(f"HiChIPdb: Error reading {fpath}: {e}")
+-        logger.info(f"HiChIPdb: Loaded {len(self.interactions)} interactions")
+-
+-    def _parse_file(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line:
+-                continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) < 4:
+-                continue
+-            row = dict(zip(header, parts))
+-            anchor1 = row.get('anchor1', row.get('chr1', ''))
+-            anchor2 = row.get('anchor2', row.get('chr2', ''))
+-            gene = row.get('gene', row.get('target_gene', ''))
+-            if not anchor1:
+-                continue
+-            self.interactions.append({
+-                'anchor1': anchor1,
+-                'anchor2': anchor2,
+-                'gene': gene,
+-                'score': row.get('score', row.get('fdr', '')),
+-                'cell_type': row.get('cell_type', row.get('tissue', '')),
+-            })
++                self._parse_bedpe(fpath)
++            except Exception as exc:
++                logger.warning(f"HiChIPdb: Error reading {fpath}: {exc}")
+ 
++    def _parse_bedpe(self, fpath):
++        """
++        BEDPE columns:
++          chr1  x1  x2  chr2  y1  y2  name  score  strand1  strand2
++          color  observed  expectedBL  expectedDonut  expectedH  expectedV
++          fdrBL  fdrDonut  fdrH  fdrV  numCollapsed
++          centroid1  centroid2  radius
++          highRes_start_1 highRes_end_1 highRes_start_2 highRes_end_2 ...
++        """
++        # Derive the ENCODE accession from filename (e.g. ENCFF661SAZ)
++        accession = fpath.stem.replace("_loops", "")
++
++        with open(fpath, "r", errors="replace") as fh:
++            header = None
++            for line in fh:
++                line = line.strip()
++                if not line:
++                    continue
++                # skip comment lines (juicer version etc.)
++                if line.startswith("#") and header is not None:
++                    continue
++                parts = line.split("\t")
++                if header is None:
++                    # first line that starts with # is the header
++                    if line.startswith("#"):
++                        parts[0] = parts[0].lstrip("#")
++                    header = parts
++                    continue
++                if len(parts) < 6:
++                    continue
++                row = dict(zip(header, parts))
++
++                chr1 = row.get("chr1", "")
++                x1   = row.get("x1", "")
++                x2   = row.get("x2", "")
++                chr2 = row.get("chr2", "")
++                y1   = row.get("y1", "")
++                y2   = row.get("y2", "")
++
++                self.loops.append({
++                    "chr1": chr1, "start1": x1, "end1": x2,
++                    "chr2": chr2, "start2": y1, "end2": y2,
++                    "observed": row.get("observed", ""),
++                    "fdr_bl": row.get("fdrBL", ""),
++                    "fdr_donut": row.get("fdrDonut", ""),
++                    "fdr_h": row.get("fdrH", ""),
++                    "fdr_v": row.get("fdrV", ""),
++                    "centroid1": row.get("centroid1", ""),
++                    "centroid2": row.get("centroid2", ""),
++                    "accession": accession,
++                })
++
++    # ------------------------------------------------------------------
++    # BioCypher interface
++    # ------------------------------------------------------------------
+     def get_nodes(self):
++        """No dedicated nodes -- loci are referenced by edges."""
+         logger.info("HiChIPdb: No dedicated nodes")
+         return
+         yield
+ 
+     def get_edges(self):
+-        logger.info("HiChIPdb: Generating EnhancerPromoterLink edges...")
++        """Yield ChromatinInteraction edges (locus1 -> locus2)."""
++        logger.info("HiChIPdb: Generating ChromatinInteraction edges...")
+         count = 0
+-        for ix in self.interactions:
+-            anchor1_id = f"hichip:{self._sanitize(ix['anchor1'])}"
++        for loop in self.loops:
++            locus1 = self._locus_id(loop["chr1"], loop["start1"], loop["end1"])
++            locus2 = self._locus_id(loop["chr2"], loop["start2"], loop["end2"])
++            edge_id = f"hichipdb:{loop['accession']}_{count}"
++
+             props = {
+-                'chromosome': self._sanitize(ix['anchor1'].split(':')[0] if ':' in ix['anchor1'] else ''),
+-                'tss': 0,
+-                'enhancer_start': 0,
+-                'enhancer_end': 0,
+-                'ensembl_id': self._sanitize(ix.get('gene', '')),
+-                'source': 'HiChIPdb',
++                "chr1":      self._sanitize(loop["chr1"]),
++                "start1":    int(loop["start1"]) if loop["start1"] else 0,
++                "end1":      int(loop["end1"])   if loop["end1"]   else 0,
++                "chr2":      self._sanitize(loop["chr2"]),
++                "start2":    int(loop["start2"]) if loop["start2"] else 0,
++                "end2":      int(loop["end2"])   if loop["end2"]   else 0,
++                "observed":  self._sanitize(loop["observed"]),
++                "fdr_bl":    self._sanitize(loop["fdr_bl"]),
++                "fdr_donut": self._sanitize(loop["fdr_donut"]),
++                "centroid1": self._sanitize(loop["centroid1"]),
++                "centroid2": self._sanitize(loop["centroid2"]),
++                "accession": self._sanitize(loop["accession"]),
++                "source":    "HiChIPdb",
+             }
+-            target = ix.get('gene', ix.get('anchor2', ''))
+-            if target:
+-                yield (None, anchor1_id, target, "EnhancerPromoterLink", props)
+-                count += 1
+-        logger.info(f"HiChIPdb: Generated {count} EnhancerPromoterLink edges")
++            yield (edge_id, locus1, locus2, "chromatin interaction", props)
++            count += 1
++        logger.info(f"HiChIPdb: Generated {count} ChromatinInteraction edges")
+diff --git a/template_package/adapters/iuucd_adapter.py b/template_package/adapters/iuucd_adapter.py
+index 783e326..a0d1227 100644
+--- a/template_package/adapters/iuucd_adapter.py
++++ b/template_package/adapters/iuucd_adapter.py
+@@ -1,8 +1,9 @@
+ """
+ iUUCD (Ubiquitin and Ubiquitin-like Conjugation Database) Adapter for BioCypher.
+ 
+-Loads ubiquitin/UBL conjugation data.
+-- ProteinHasPTM edges (ubiquitin-like modifications)
++Parses iUUCD enzyme data and UniProt ubiquitin conjugation pathway annotations.
++
++Yields ProteinHasPTM edges representing ubiquitination-related modifications.
+ """
+ 
+ from pathlib import Path
+@@ -13,6 +14,7 @@ class IUUCDAdapter:
+     def __init__(self, data_dir="template_package/data/iuucd"):
+         self.data_dir = Path(data_dir)
+         self.entries = []
++        self._seen_keys = set()
+         self._load_data()
+ 
+     def _sanitize(self, text):
+@@ -23,68 +25,190 @@ class IUUCDAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
++    def _classify_enzyme(self, family_str):
++        """Classify enzyme into E1/E2/E3/DUB from the iUUCD family field."""
++        if not family_str:
++            return "unknown"
++        fl = family_str.lower()
++        if 'e1' in fl or 'activating' in fl:
++            return "E1"
++        elif 'e2' in fl or 'conjugating' in fl:
++            return "E2"
++        elif 'e3' in fl or 'ligase' in fl:
++            return "E3"
++        elif 'dub' in fl or 'deubiquitin' in fl or 'hydrolase' in fl or 'usp' in fl:
++            return "DUB"
++        return "unknown"
++
++    def _classify_enzyme_from_uniprot(self, protein_name, gene_names, go_mf):
++        """Classify enzyme class from UniProt fields."""
++        combined = (protein_name + " " + gene_names + " " + go_mf).lower()
++        if 'ubiquitin-activating' in combined or 'uba' in gene_names.lower().split()[0:1]:
++            return "E1"
++        if 'ubiquitin-conjugating' in combined or 'ube2' in combined:
++            return "E2"
++        if 'ubiquitin-protein ligase' in combined or 'ubiquitin ligase' in combined:
++            return "E3"
++        if 'deubiquitin' in combined or 'ubiquitin carboxyl-terminal hydrolase' in combined:
++            return "DUB"
++        # Check gene name prefixes
++        first_gene = gene_names.split()[0].upper() if gene_names.strip() else ""
++        if first_gene.startswith('UBA') or first_gene.startswith('UBE1'):
++            return "E1"
++        if first_gene.startswith('UBE2') or first_gene.startswith('UBC'):
++            return "E2"
++        if first_gene.startswith('UBE3') or first_gene.startswith('RNF') or first_gene.startswith('TRIM'):
++            return "E3"
++        if first_gene.startswith('USP') or first_gene.startswith('OTUB') or first_gene.startswith('UCHL'):
++            return "DUB"
++        return "unknown"
++
+     def _load_data(self):
+         if not self.data_dir.exists():
+             logger.warning("iUUCD: data directory not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv"))
+-                      + list(self.data_dir.glob("*.txt"))
+-                      + list(self.data_dir.glob("*.csv")))
+-        for fpath in candidates:
+-            try:
+-                with open(fpath, 'r', errors='replace') as f:
+-                    first = f.readline()
+-                    if first.startswith('<'):
+-                        continue
+-                    f.seek(0)
+-                    self._parse_file(f)
+-            except Exception as e:
+-                logger.warning(f"iUUCD: Error reading {fpath}: {e}")
+-        logger.info(f"iUUCD: Loaded {len(self.entries)} entries")
+-
+-    def _parse_file(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line:
+-                continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) < 2:
+-                continue
+-            row = dict(zip(header, parts))
+-            substrate = row.get('Substrate', row.get('target', ''))
+-            modifier = row.get('UBL', row.get('modifier', ''))
+-            if not substrate:
+-                continue
+-            self.entries.append({
+-                'substrate': substrate,
+-                'modifier': modifier,
+-                'enzyme': row.get('E3', row.get('enzyme', '')),
+-            })
++
++        # 1. Parse iUUCD native data
++        iuucd_file = self.data_dir / "iuucd_human.tsv"
++        if iuucd_file.exists():
++            self._parse_iuucd_native(iuucd_file)
++        else:
++            logger.warning("iUUCD: iuucd_human.tsv not found")
++
++        # 2. Parse UniProt ubiquitin conjugation data
++        uniprot_file = self.data_dir / "uniprot_ubiquitin_conjugation.tsv"
++        if uniprot_file.exists():
++            self._parse_uniprot_ubiquitin(uniprot_file)
++        else:
++            logger.warning("iUUCD: uniprot_ubiquitin_conjugation.tsv not found")
++
++        logger.info(f"iUUCD: Loaded {len(self.entries)} unique entries")
++
++    def _parse_iuucd_native(self, fpath):
++        """Parse iUUCD native TSV (status, iuucd_id, view_url, gene_alias_name,
++        ensembl_gene_id, species, family)."""
++        with open(fpath, 'r', errors='replace') as fh:
++            header_line = fh.readline().strip()
++            if not header_line:
++                return
++            headers = header_line.split('\t')
++
++            for line in fh:
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split('\t')
++                row = dict(zip(headers, parts))
++
++                iuucd_id = row.get('iuucd_id', '').strip()
++                gene_aliases = row.get('gene_alias_name', '').strip()
++                # Take first gene alias as primary
++                gene_name = gene_aliases.split(';')[0].strip() if gene_aliases else ""
++                ensembl_id = row.get('ensembl_gene_id', '').strip()
++                # Strip version suffix from Ensembl ID
++                if '.' in ensembl_id:
++                    ensembl_id = ensembl_id.split('.')[0]
++                family = row.get('family', '').strip()
++                status = row.get('status', '').strip()
++
++                if not iuucd_id or not gene_name:
++                    continue
++
++                dedup_key = ("iuucd", iuucd_id)
++                if dedup_key in self._seen_keys:
++                    continue
++                self._seen_keys.add(dedup_key)
++
++                enzyme_class = self._classify_enzyme(family)
++
++                self.entries.append({
++                    'id': iuucd_id,
++                    'gene_name': gene_name,
++                    'all_gene_aliases': gene_aliases,
++                    'ensembl_id': ensembl_id,
++                    'protein_name': '',
++                    'enzyme_class': enzyme_class,
++                    'family': family,
++                    'ptm_type': 'ubiquitination',
++                    'status': status,
++                    'source_file': 'iuucd_human',
++                })
++
++    def _parse_uniprot_ubiquitin(self, fpath):
++        """Parse UniProt ubiquitin conjugation pathway TSV."""
++        with open(fpath, 'r', errors='replace') as fh:
++            header_line = fh.readline().strip()
++            if not header_line or header_line.startswith('<'):
++                return
++            headers = header_line.split('\t')
++
++            for line in fh:
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split('\t')
++                row = dict(zip(headers, parts))
++
++                uniprot_id = row.get('Entry', '').strip()
++                if not uniprot_id:
++                    continue
++
++                gene_names_raw = row.get('Gene Names', '').strip()
++                gene_name = gene_names_raw.split()[0] if gene_names_raw else ""
++                protein_name = row.get('Protein names', '').strip()
++                go_mf = row.get('Gene Ontology (molecular function)', '').strip()
++                go_bp = row.get('Gene Ontology (biological process)', '').strip()
++                domain = row.get('Domain [FT]', '').strip()
++
++                dedup_key = ("uniprot", uniprot_id)
++                if dedup_key in self._seen_keys:
++                    continue
++                self._seen_keys.add(dedup_key)
++
++                enzyme_class = self._classify_enzyme_from_uniprot(
++                    protein_name, gene_names_raw, go_mf
++                )
++
++                self.entries.append({
++                    'id': uniprot_id,
++                    'gene_name': gene_name,
++                    'all_gene_aliases': gene_names_raw,
++                    'ensembl_id': '',
++                    'protein_name': protein_name,
++                    'enzyme_class': enzyme_class,
++                    'family': '',
++                    'ptm_type': 'ubiquitin conjugation',
++                    'status': '',
++                    'go_molecular_function': go_mf,
++                    'go_biological_process': go_bp,
++                    'domain': domain,
++                    'source_file': 'uniprot_ubiquitin_conjugation',
++                })
+ 
+     def get_nodes(self):
+-        logger.info("iUUCD: No dedicated nodes")
++        logger.info("iUUCD: No dedicated nodes (proteins referenced by ID)")
+         return
+         yield
+ 
+     def get_edges(self):
+-        logger.info("iUUCD: Generating ProteinHasPTM edges (UBL modifications)...")
++        logger.info("iUUCD: Generating ProteinHasPTM edges (ubiquitination)...")
+         count = 0
+         for entry in self.entries:
++            edge_id = f"iuucd:{entry['id']}"
++            source_id = entry['id']
++            target_id = f"ptm:ubiquitination:{entry['gene_name']}"
++
+             props = {
+-                'site': '',
+-                'ptm_type': self._sanitize(f"UBL:{entry.get('modifier', 'Ubiquitin')}"),
+-                'residue': '',
+-                'score': 0,
+-                'enzymes': self._sanitize(entry.get('enzyme', '')),
+-                'pmids': '',
++                'ptm_type': self._sanitize(entry['ptm_type']),
++                'enzyme_class': self._sanitize(entry['enzyme_class']),
++                'gene_name': self._sanitize(entry['gene_name']),
++                'protein_name': self._sanitize(entry.get('protein_name', '')),
++                'family': self._sanitize(entry.get('family', '')),
++                'ensembl_id': self._sanitize(entry.get('ensembl_id', '')),
+                 'source': 'iUUCD',
++                'source_file': entry.get('source_file', ''),
+             }
+-            yield (None, entry['substrate'],
+-                   f"iuucd:{entry['substrate']}_{entry.get('modifier', '')}",
++            yield (edge_id, source_id, target_id,
+                    "ProteinHasPTM", props)
+             count += 1
+         logger.info(f"iUUCD: Generated {count} ProteinHasPTM edges")
+diff --git a/template_package/adapters/mitocarta_adapter.py b/template_package/adapters/mitocarta_adapter.py
+index 5da8621..4851542 100644
+--- a/template_package/adapters/mitocarta_adapter.py
++++ b/template_package/adapters/mitocarta_adapter.py
+@@ -1,55 +1,23 @@
+ """
+ MitoCarta Adapter for BioCypher.
+ 
+-Loads MitoCarta 3.0 mitochondrial proteome data and generates:
+-- MitochondrialProtein edges (proteins localized to mitochondria)
++Parses UniProt mitochondrial protein TSV files and generates:
++- SubcellularLocalization edges (gene -> mitochondrion)
+ 
+-MitoCarta is a comprehensive inventory of mitochondrial proteins,
+-scored by evidence from proteomics, literature, and homology.
++Data files:
++- uniprot_mitochondria_human.tsv (all human mitochondrial proteins)
++- uniprot_mito_reviewed.tsv (reviewed subset with GO components)
+ """
+ 
+-from html.parser import HTMLParser
++import csv
+ from pathlib import Path
+ from biocypher._logger import logger
+ 
+ 
+-class _TableParser(HTMLParser):
+-    def __init__(self):
+-        super().__init__()
+-        self.in_table = False
+-        self.in_row = False
+-        self.in_cell = False
+-        self.current_row = []
+-        self.rows = []
+-
+-    def handle_starttag(self, tag, attrs):
+-        if tag == 'table':
+-            self.in_table = True
+-        elif tag == 'tr':
+-            self.in_row = True
+-            self.current_row = []
+-        elif tag in ('td', 'th'):
+-            self.in_cell = True
+-
+-    def handle_endtag(self, tag):
+-        if tag == 'table':
+-            self.in_table = False
+-        elif tag == 'tr':
+-            self.in_row = False
+-            if self.current_row:
+-                self.rows.append(self.current_row)
+-        elif tag in ('td', 'th'):
+-            self.in_cell = False
+-
+-    def handle_data(self, data):
+-        if self.in_cell:
+-            self.current_row.append(data.strip())
+-
+-
+ class MitoCartaAdapter:
+     def __init__(self, data_dir="template_package/data/mitocarta"):
+         self.data_dir = Path(data_dir)
+-        self.proteins = []
++        self.proteins = {}  # keyed by UniProt Entry to deduplicate
+         self._load_data()
+ 
+     def _sanitize(self, text):
+@@ -60,91 +28,117 @@ class MitoCartaAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
+-    def _load_data(self):
+-        """Load MitoCarta protein data from HTML."""
+-        path = self.data_dir / 'mitocarta_html.html'
+-        if not path.exists():
+-            logger.warning("MitoCarta: HTML data not found")
+-            return
+-
+-        logger.info("MitoCarta: Loading mitochondrial proteome...")
+-
+-        with open(path, 'r', encoding='utf-8') as f:
+-            content = f.read()
+-
+-        parser = _TableParser()
+-        parser.feed(content)
+-
+-        if len(parser.rows) < 2:
+-            logger.warning("MitoCarta: No data rows found in HTML")
+-            return
+-
+-        header = parser.rows[0]
+-        for row in parser.rows[1:]:
+-            if len(row) < 3:
+-                continue
+-
+-            symbol = row[0].strip() if len(row) > 0 else ''
+-            description = row[1].strip() if len(row) > 1 else ''
+-            synonyms = row[2].strip() if len(row) > 2 else ''
+-            score = row[3].strip() if len(row) > 3 else '0'
+-            evidence = row[4].strip() if len(row) > 4 else ''
+-
+-            if not symbol:
++    def _parse_subcellular_locations(self, raw):
++        """Extract location names from UniProt SUBCELLULAR LOCATION string."""
++        if not raw:
++            return []
++        # Remove the prefix
++        text = raw.replace("SUBCELLULAR LOCATION: ", "")
++        # Remove evidence codes like {ECO:...}
++        import re
++        text = re.sub(r'\{[^}]*\}', '', text)
++        # Remove Note=... sections
++        text = re.sub(r'Note=.*', '', text)
++        # Split on '. ' to get location groups, then on ';' for sub-parts
++        locations = set()
++        for segment in text.split('.'):
++            segment = segment.strip()
++            if not segment:
+                 continue
++            # Take the first part before ';' which is the main location
++            main_loc = segment.split(';')[0].strip()
++            if main_loc and len(main_loc) > 1:
++                locations.add(main_loc)
++        return sorted(locations)
+ 
+-            # Extract UniProt ID from synonyms if present
+-            uniprot = ''
+-            for syn in synonyms.split(','):
+-                syn = syn.strip()
+-                if len(syn) == 6 and syn[0].isalpha() and syn[1:].replace('_', '').isalnum():
+-                    uniprot = syn
+-                    break
+-
+-            try:
+-                score_int = int(score)
+-            except ValueError:
+-                score_int = 0
+-
+-            self.proteins.append({
+-                'symbol': symbol,
+-                'description': description,
+-                'score': score_int,
+-                'evidence': evidence,
+-                'uniprot': uniprot,
+-            })
+-
+-        logger.info(f"MitoCarta: Loaded {len(self.proteins)} mitochondrial proteins")
++    def _load_data(self):
++        """Load reviewed proteins first (richer data), then fill in from full set."""
++        # Load reviewed file first (has GO components and EC numbers)
++        reviewed_path = self.data_dir / 'uniprot_mito_reviewed.tsv'
++        if reviewed_path.exists():
++            logger.info("MitoCarta: Loading reviewed mitochondrial proteins...")
++            with open(reviewed_path, 'r', encoding='utf-8') as f:
++                reader = csv.DictReader(f, delimiter='\t')
++                for row in reader:
++                    entry = row.get('Entry', '').strip()
++                    if not entry:
++                        continue
++                    gene_names = row.get('Gene Names', '').strip()
++                    gene_name = gene_names.split()[0] if gene_names else ''
++                    self.proteins[entry] = {
++                        'entry': entry,
++                        'gene_name': gene_name,
++                        'gene_names_all': gene_names,
++                        'protein_name': row.get('Protein names', '').strip(),
++                        'subcellular_location': row.get('Subcellular location [CC]', '').strip(),
++                        'go_component': row.get('Gene Ontology (cellular component)', '').strip(),
++                        'ec_number': row.get('EC number', '').strip(),
++                        'reviewed': True,
++                    }
++            logger.info(f"MitoCarta: Loaded {len(self.proteins)} reviewed proteins")
++
++        # Load full human mitochondrial set
++        full_path = self.data_dir / 'uniprot_mitochondria_human.tsv'
++        if full_path.exists():
++            logger.info("MitoCarta: Loading full mitochondrial protein set...")
++            added = 0
++            with open(full_path, 'r', encoding='utf-8') as f:
++                reader = csv.DictReader(f, delimiter='\t')
++                for row in reader:
++                    entry = row.get('Entry', '').strip()
++                    if not entry or entry in self.proteins:
++                        continue
++                    gene_names = row.get('Gene Names', '').strip()
++                    gene_name = gene_names.split()[0] if gene_names else ''
++                    self.proteins[entry] = {
++                        'entry': entry,
++                        'gene_name': gene_name,
++                        'gene_names_all': gene_names,
++                        'protein_name': row.get('Protein names', '').strip(),
++                        'subcellular_location': row.get('Subcellular location [CC]', '').strip(),
++                        'go_component': '',
++                        'ec_number': '',
++                        'reviewed': False,
++                    }
++                    added += 1
++            logger.info(f"MitoCarta: Added {added} unreviewed proteins (total: {len(self.proteins)})")
+ 
+     def get_nodes(self):
+-        """No new nodes."""
+-        logger.info("MitoCarta: No new nodes")
++        """No new nodes -- genes already exist; mitochondrion is a known term."""
++        logger.info("MitoCarta: No new nodes (genes and organelles exist elsewhere)")
+         return iter([])
+ 
+     def get_edges(self):
+         """
+-        Generate MitochondrialProtein edges.
+-        Yields: (id, source, target, label, properties)
++        Yield SubcellularLocalization edges: gene -> mitochondrion.
++
++        Each edge: (id, source, target, label, properties)
+         """
+-        logger.info("MitoCarta: Generating edges...")
++        logger.info("MitoCarta: Generating SubcellularLocalization edges...")
+         count = 0
+ 
+-        for prot in self.proteins:
++        for entry, prot in self.proteins.items():
++            gene = prot['gene_name'] or entry  # fall back to UniProt ID
++            locations = self._parse_subcellular_locations(prot['subcellular_location'])
++            location_str = '; '.join(locations) if locations else 'Mitochondrion'
++
+             props = {
+-                'gene_symbol': self._sanitize(prot['symbol']),
+-                'description': self._sanitize(prot['description'][:200]),
+-                'maestro_score': prot['score'],
+-                'evidence': self._sanitize(prot['evidence'][:200]),
+-                'source': 'MitoCarta3',
++                'uniprot_id': self._sanitize(entry),
++                'gene_name': self._sanitize(prot['gene_name']),
++                'protein_name': self._sanitize(prot['protein_name'][:200]),
++                'subcellular_location': self._sanitize(location_str[:300]),
++                'go_component': self._sanitize(prot['go_component'][:300]),
++                'reviewed': prot['reviewed'],
++                'source': 'UniProt_Mitochondria',
+             }
+ 
+             yield (
+-                None,
+-                prot['symbol'],
+-                "MITOCHONDRIA",
+-                "MitochondrialProtein",
+-                props
++                f"mito:{entry}",
++                gene,
++                "GO:0005739",  # mitochondrion GO term
++                "SubcellularLocalization",
++                props,
+             )
+             count += 1
+ 
+-        logger.info(f"MitoCarta: Generated {count} MitochondrialProtein edges")
++        logger.info(f"MitoCarta: Generated {count} SubcellularLocalization edges")
+diff --git a/template_package/adapters/sepdb_adapter.py b/template_package/adapters/sepdb_adapter.py
+index 1b1a52e..c18b516 100644
+--- a/template_package/adapters/sepdb_adapter.py
++++ b/template_package/adapters/sepdb_adapter.py
+@@ -1,7 +1,9 @@
+ """
+-SEPDB (Secreted Proteins Database) Adapter for BioCypher.
++SEPDB (Super-Enhancer Database / dbSUPER) Adapter for BioCypher.
+ 
+-Loads secreted protein data.
++Parses dbSUPER_SuperEnhancers_hg19.tsv to yield:
++  - SuperEnhancer nodes  (genomic regions with tissue annotations)
++  - Regulatory edges     (super enhancer -> gene)
+ """
+ 
+ from pathlib import Path
+@@ -11,74 +13,109 @@ from biocypher._logger import logger
+ class SEPDBAdapter:
+     def __init__(self, data_dir="template_package/data/sepdb"):
+         self.data_dir = Path(data_dir)
+-        self.proteins = []
++        self.enhancers = []   # list of dicts
+         self._load_data()
+ 
+-    def _sanitize(self, text):
++    # ------------------------------------------------------------------
++    # helpers
++    # ------------------------------------------------------------------
++    @staticmethod
++    def _sanitize(text):
+         if text is None:
+             return ""
+         text = str(text)
+         text = text.replace('"', '""')
+-        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+         return text.strip()
+ 
++    # ------------------------------------------------------------------
++    # loading
++    # ------------------------------------------------------------------
+     def _load_data(self):
+         if not self.data_dir.exists():
+             logger.warning("SEPDB: data directory not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv"))
+-                      + list(self.data_dir.glob("*.csv"))
+-                      + list(self.data_dir.glob("*.txt")))
+-        for fpath in candidates:
+-            try:
+-                with open(fpath, 'r', errors='replace') as f:
+-                    first = f.readline()
+-                    if first.startswith('<'):
+-                        continue
+-                    f.seek(0)
+-                    self._parse_file(f)
+-            except Exception as e:
+-                logger.warning(f"SEPDB: Error reading {fpath}: {e}")
+-        logger.info(f"SEPDB: Loaded {len(self.proteins)} secreted proteins")
++        self._parse_tsv()
++        logger.info(f"SEPDB: Loaded {len(self.enhancers)} super-enhancers")
+ 
+-    def _parse_file(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line:
+-                continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) < 2:
+-                continue
+-            row = dict(zip(header, parts))
+-            gene = row.get('gene_symbol', row.get('Gene', ''))
+-            if not gene:
+-                continue
+-            self.proteins.append({
+-                'gene': gene,
+-                'uniprot': row.get('uniprot_id', row.get('UniProt', '')),
+-                'tissue': row.get('tissue', ''),
+-            })
++    def _parse_tsv(self):
++        """
++        Parse dbSUPER_SuperEnhancers_hg19.tsv.
++        Columns (note leading spaces): chrom, start, stop, se_id, gene_symbol, cell_name, rank
++        """
++        fpath = self.data_dir / "dbSUPER_SuperEnhancers_hg19.tsv"
++        if not fpath.exists():
++            logger.warning("SEPDB: dbSUPER TSV not found")
++            return
++        with open(fpath, "r", errors="replace") as fh:
++            header = None
++            for line in fh:
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split("\t")
++                if header is None:
++                    # strip whitespace from column names
++                    header = [c.strip() for c in parts]
++                    continue
++                if len(parts) < 5:
++                    continue
++                row = dict(zip(header, [p.strip() for p in parts]))
++
++                self.enhancers.append({
++                    "chrom":       row.get("chrom", ""),
++                    "start":       row.get("start", ""),
++                    "stop":        row.get("stop", ""),
++                    "se_id":       row.get("se_id", ""),
++                    "gene_symbol": row.get("gene_symbol", ""),
++                    "cell_name":   row.get("cell_name", ""),
++                    "rank":        row.get("rank", ""),
++                })
+ 
++    # ------------------------------------------------------------------
++    # BioCypher interface
++    # ------------------------------------------------------------------
+     def get_nodes(self):
+-        logger.info("SEPDB: No dedicated nodes")
+-        return
+-        yield
++        """Yield SuperEnhancer nodes."""
++        logger.info("SEPDB: Generating SuperEnhancer nodes...")
++        count = 0
++        seen = set()
++        for se in self.enhancers:
++            se_id = se["se_id"]
++            if not se_id or se_id in seen:
++                continue
++            seen.add(se_id)
++            props = {
++                "chrom":     self._sanitize(se["chrom"]),
++                "start":     int(se["start"]) if se["start"] else 0,
++                "stop":      int(se["stop"])  if se["stop"]  else 0,
++                "cell_name": self._sanitize(se["cell_name"]),
++                "rank":      self._sanitize(se["rank"]),
++                "source":    "dbSUPER",
++            }
++            yield (se_id, "super enhancer", props)
++            count += 1
++        logger.info(f"SEPDB: Generated {count} SuperEnhancer nodes")
+ 
+     def get_edges(self):
+-        logger.info("SEPDB: Generating SignalPeptide edges (secreted proteins)...")
++        """Yield 'super enhancer regulates gene' edges (SE -> gene symbol)."""
++        logger.info("SEPDB: Generating regulatory edges...")
+         count = 0
+-        for prot in self.proteins:
+-            gene_id = prot.get('uniprot', prot['gene'])
++        for se in self.enhancers:
++            se_id = se["se_id"]
++            gene  = se["gene_symbol"]
++            if not se_id or not gene:
++                continue
++
++            edge_id = f"sepdb:{se_id}_{self._sanitize(gene)}_{self._sanitize(se['cell_name'])}"
+             props = {
+-                'gene_name': self._sanitize(prot['gene']),
+-                'peptide_type': 'secreted',
+-                'peptide_info': self._sanitize(prot.get('tissue', '')),
+-                'source': 'SEPDB',
++                "cell_name": self._sanitize(se["cell_name"]),
++                "rank":      self._sanitize(se["rank"]),
++                "chrom":     self._sanitize(se["chrom"]),
++                "start":     int(se["start"]) if se["start"] else 0,
++                "stop":      int(se["stop"])  if se["stop"]  else 0,
++                "source":    "dbSUPER",
+             }
+-            yield (None, gene_id, f"sepdb:{prot['gene']}", "SignalPeptide", props)
++            yield (edge_id, se_id, gene, "super enhancer regulates gene", props)
+             count += 1
+-        logger.info(f"SEPDB: Generated {count} SignalPeptide edges")
++        logger.info(f"SEPDB: Generated {count} regulatory edges")
+diff --git a/template_package/adapters/swisspalm_adapter.py b/template_package/adapters/swisspalm_adapter.py
+index 5f35125..e406e88 100644
+--- a/template_package/adapters/swisspalm_adapter.py
++++ b/template_package/adapters/swisspalm_adapter.py
+@@ -1,10 +1,20 @@
+ """
+ SwissPalm (Protein S-Palmitoylation) Adapter for BioCypher.
+ 
+-Loads protein palmitoylation data and generates:
+-- ProteinHasPTM edges (palmitoylation as PTM type)
++Loads protein palmitoylation/lipidation data from UniProt-sourced TSV files
++and generates ProteinHasPTM edges with per-site granularity.
++
++Data files parsed:
++  - uniprot_palmitoylation_reviewed.tsv   (4,844 proteins, all species, reviewed)
++  - uniprot_all_lipidation_human.tsv      (801 human lipidation entries)
++  - uniprot_palmitoylation_human_detailed.tsv (314 human, detailed)
++  - uniprot_palmitoylation.tsv            (321 records)
++
++Each protein may carry multiple LIPID annotations; every individual site
++is emitted as a separate ProteinHasPTM edge.
+ """
+ 
++import re
+ from pathlib import Path
+ from biocypher._logger import logger
+ 
+@@ -12,10 +22,15 @@ from biocypher._logger import logger
+ class SwissPalmAdapter:
+     def __init__(self, data_dir="template_package/data/swisspalm"):
+         self.data_dir = Path(data_dir)
+-        self.sites = []
++        self.sites = []          # list of dicts, one per individual lipid site
++        self._seen_keys = set()  # dedup key = (acc, position, note)
+         self._load_data()
+ 
+-    def _sanitize(self, text):
++    # ------------------------------------------------------------------
++    # helpers
++    # ------------------------------------------------------------------
++    @staticmethod
++    def _sanitize(text):
+         if text is None:
+             return ""
+         text = str(text)
+@@ -23,50 +38,126 @@ class SwissPalmAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
++    _LIPID_RE = re.compile(
++        r'LIPID\s+(\d+)\s*;\s*/note="([^"]+)"'
++        r'(?:\s*;\s*/evidence="([^"]*)")?'
++    )
++
++    def _parse_lipid_field(self, lipid_str):
++        """Yield (position, note, evidence) tuples from a Lipidation column."""
++        for m in self._LIPID_RE.finditer(lipid_str):
++            yield m.group(1), m.group(2), m.group(3) or ""
++
++    @staticmethod
++    def _classify_ptm(note):
++        """Return a normalised ptm_type string from the LIPID /note value."""
++        nl = note.lower()
++        if "palmitoyl" in nl:
++            return "palmitoylation"
++        if "myristoyl" in nl:
++            return "myristoylation"
++        if "farnesyl" in nl:
++            return "prenylation"
++        if "geranylgeranyl" in nl:
++            return "prenylation"
++        if "gpi-anchor" in nl or "gpi" in nl:
++            return "GPI-anchor"
++        if "diacylglycerol" in nl:
++            return "lipidation"
++        return "lipidation"
++
++    @staticmethod
++    def _first_gene(gene_field):
++        """Return the first token of a potentially multi-gene field."""
++        if not gene_field:
++            return ""
++        return gene_field.split()[0]
++
++    # ------------------------------------------------------------------
++    # loading
++    # ------------------------------------------------------------------
+     def _load_data(self):
+         if not self.data_dir.exists():
+             logger.warning("SwissPalm: data directory not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv"))
+-                      + list(self.data_dir.glob("*.csv"))
+-                      + list(self.data_dir.glob("*.txt")))
+-        for fpath in candidates:
++
++        # Process files in a defined priority order so that the most
++        # informative file (reviewed, all species) is loaded first.
++        file_order = [
++            "uniprot_palmitoylation_reviewed.tsv",
++            "uniprot_all_lipidation_human.tsv",
++            "uniprot_palmitoylation_human_detailed.tsv",
++            "uniprot_palmitoylation.tsv",
++        ]
++        for fname in file_order:
++            fpath = self.data_dir / fname
++            if not fpath.exists():
++                continue
+             try:
+-                with open(fpath, 'r', errors='replace') as f:
+-                    first = f.readline()
+-                    if first.startswith('<'):
+-                        continue
+-                    f.seek(0)
+-                    sep = ',' if fpath.suffix == '.csv' else '\t'
+-                    self._parse_file(f, sep)
++                self._parse_uniprot_tsv(fpath)
+             except Exception as e:
+-                logger.warning(f"SwissPalm: Error reading {fpath}: {e}")
+-        logger.info(f"SwissPalm: Loaded {len(self.sites)} palmitoylation sites")
+-
+-    def _parse_file(self, fh, sep='\t'):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line:
+-                continue
+-            parts = line.split(sep)
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) < 2:
+-                continue
+-            row = dict(zip(header, parts))
+-            acc = row.get('UniProt_AC', row.get('uniprot', row.get('UniProtKB', '')))
+-            if not acc:
+-                continue
+-            self.sites.append({
+-                'acc': acc,
+-                'gene': row.get('Gene_name', row.get('gene', '')),
+-                'position': row.get('Position', row.get('position', '')),
+-            })
++                logger.warning(f"SwissPalm: Error reading {fpath.name}: {e}")
++
++        logger.info(
++            f"SwissPalm: Loaded {len(self.sites)} individual lipidation "
++            f"sites from {len({s['acc'] for s in self.sites})} proteins"
++        )
++
++    def _parse_uniprot_tsv(self, fpath):
++        """Parse a UniProt-style TSV that has an Entry column and a
++        Lipidation column containing one or more ``LIPID ...`` annotations."""
++        with open(fpath, "r", errors="replace") as fh:
++            header_line = fh.readline()
++            if header_line.startswith("<"):
++                return  # HTML error page
++            headers = header_line.rstrip("\n").split("\t")
++
++            # Identify relevant column indices
++            col = {h: i for i, h in enumerate(headers)}
++            acc_idx = col.get("Entry")
++            gene_idx = col.get("Gene Names", col.get("Gene_name"))
++            lipid_idx = col.get("Lipidation")
++            organism_idx = col.get("Organism")
++
++            if acc_idx is None or lipid_idx is None:
++                return  # cannot process without these columns
++
++            for line in fh:
++                parts = line.rstrip("\n").split("\t")
++                if len(parts) <= max(acc_idx, lipid_idx):
++                    continue
++
++                acc = parts[acc_idx].strip()
++                if not acc:
++                    continue
++
++                gene_raw = parts[gene_idx].strip() if gene_idx is not None and gene_idx < len(parts) else ""
++                gene = self._first_gene(gene_raw)
++                organism = parts[organism_idx].strip() if organism_idx is not None and organism_idx < len(parts) else ""
++                lipid_field = parts[lipid_idx]
++
++                for position, note, evidence in self._parse_lipid_field(lipid_field):
++                    key = (acc, position, note)
++                    if key in self._seen_keys:
++                        continue
++                    self._seen_keys.add(key)
++
++                    self.sites.append({
++                        "acc": acc,
++                        "gene": gene,
++                        "position": position,
++                        "note": note,
++                        "evidence": evidence,
++                        "organism": organism,
++                        "ptm_type": self._classify_ptm(note),
++                        "source_file": fpath.name,
++                    })
+ 
++    # ------------------------------------------------------------------
++    # BioCypher interface
++    # ------------------------------------------------------------------
+     def get_nodes(self):
+-        logger.info("SwissPalm: No dedicated nodes")
++        logger.info("SwissPalm: No dedicated nodes (uses existing protein nodes)")
+         return
+         yield
+ 
+@@ -74,16 +165,19 @@ class SwissPalmAdapter:
+         logger.info("SwissPalm: Generating ProteinHasPTM edges...")
+         count = 0
+         for site in self.sites:
+-            site_id = f"swisspalm:{site['acc']}_{site.get('position', count)}"
++            edge_id = f"swisspalm:{site['acc']}_LIPID{site['position']}"
++            target = site["gene"] if site["gene"] else site["acc"]
+             props = {
+-                'site': self._sanitize(site.get('position', '')),
+-                'ptm_type': 'Palmitoylation',
+-                'residue': 'Cys',
+-                'score': 0,
+-                'enzymes': '',
+-                'pmids': '',
+-                'source': 'SwissPalm',
++                "site": self._sanitize(site["position"]),
++                "ptm_type": site["ptm_type"],
++                "residue": self._sanitize(site["note"]),
++                "score": 0,
++                "enzymes": "",
++                "pmids": "",
++                "source": "SwissPalm",
++                "organism": self._sanitize(site["organism"]),
++                "evidence": self._sanitize(site["evidence"]),
+             }
+-            yield (None, site['acc'], site_id, "ProteinHasPTM", props)
++            yield (None, site["acc"], target, "ProteinHasPTM", props)
+             count += 1
+         logger.info(f"SwissPalm: Generated {count} ProteinHasPTM edges")
+diff --git a/template_package/adapters/ubinet_adapter.py b/template_package/adapters/ubinet_adapter.py
+index bf5a0aa..0b5707b 100644
+--- a/template_package/adapters/ubinet_adapter.py
++++ b/template_package/adapters/ubinet_adapter.py
+@@ -1,8 +1,19 @@
+ """
+-UbiNet (E3-Substrate Interaction) Adapter for BioCypher.
++UbiNet (E3/DUB-Substrate Interaction) Adapter for BioCypher.
+ 
+-Loads E3 ubiquitin ligase-substrate interaction data.
+-- E3SubstrateInteraction edges
++Loads literature-curated E3 ubiquitin-ligase and deubiquitinase (DUB)
++substrate interaction data and generates ProteinHasPTM edges
++(ubiquitination / deubiquitination).
++
++Data files parsed:
++  - literature.E3.txt   (4,068 E3-substrate interactions)
++  - literature.DUB.txt  (967 DUB-substrate interactions)
++
++Columns (tab-separated, identical layout for E3 and DUB files):
++  NUMBER | SwissProt ID (E3/DUB) | SwissProt ID (Substrate) |
++  SwissProt AC (E3/DUB) | SwissProt AC (Substrate) |
++  Gene Symbol (E3/DUB) | Gene Symbol (Substrate) |
++  SOURCE | SOURCEID | SENTENCE | E3TYPE/DUBTYPE | COUNT | type | species
+ """
+ 
+ from pathlib import Path
+@@ -12,61 +23,123 @@ from biocypher._logger import logger
+ class UbiNetAdapter:
+     def __init__(self, data_dir="template_package/data/ubinet"):
+         self.data_dir = Path(data_dir)
+-        self.interactions = []
++        self.interactions = []   # list of dicts
++        self._seen_keys = set()  # dedup key = (enzyme_ac, substrate_ac, interaction_type)
+         self._load_data()
+ 
+-    def _sanitize(self, text):
++    # ------------------------------------------------------------------
++    # helpers
++    # ------------------------------------------------------------------
++    @staticmethod
++    def _sanitize(text):
+         if text is None:
+             return ""
+         text = str(text)
+         text = text.replace('"', '""')
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        # Strip HTML tags that appear in some SENTENCE fields
++        import re
++        text = re.sub(r'<[^>]+>', '', text)
+         return text.strip()
+ 
++    # ------------------------------------------------------------------
++    # loading
++    # ------------------------------------------------------------------
+     def _load_data(self):
+         if not self.data_dir.exists():
+             logger.warning("UbiNet: data directory not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv"))
+-                      + list(self.data_dir.glob("*.csv"))
+-                      + list(self.data_dir.glob("*.txt")))
+-        for fpath in candidates:
++
++        for fname, interaction_type in [
++            ("literature.E3.txt", "E3-substrate"),
++            ("literature.DUB.txt", "DUB-substrate"),
++        ]:
++            fpath = self.data_dir / fname
++            if not fpath.exists():
++                logger.warning(f"UbiNet: {fname} not found")
++                continue
+             try:
+-                with open(fpath, 'r', errors='replace') as f:
+-                    first = f.readline()
+-                    if first.startswith('<'):
+-                        continue
+-                    f.seek(0)
+-                    self._parse_file(f)
++                self._parse_interaction_file(fpath, interaction_type)
+             except Exception as e:
+-                logger.warning(f"UbiNet: Error reading {fpath}: {e}")
++                logger.warning(f"UbiNet: Error reading {fname}: {e}")
++
+         logger.info(f"UbiNet: Loaded {len(self.interactions)} interactions")
+ 
+-    def _parse_file(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line:
+-                continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) < 2:
+-                continue
+-            row = dict(zip(header, parts))
+-            e3 = row.get('E3', row.get('e3_ligase', row.get('source', '')))
+-            substrate = row.get('Substrate', row.get('substrate', row.get('target', '')))
+-            if not e3 or not substrate:
+-                continue
+-            self.interactions.append({
+-                'e3': e3,
+-                'substrate': substrate,
+-                'pmid': row.get('PMID', row.get('pmid', '')),
+-            })
++    def _parse_interaction_file(self, fpath, interaction_type):
++        """Parse a UbiNet literature interaction file (tab-separated)."""
++        with open(fpath, "r", errors="replace") as fh:
++            header_line = fh.readline()
++            if header_line.startswith("<"):
++                return
++            headers = header_line.rstrip("\n").split("\t")
++            col = {h.strip(): i for i, h in enumerate(headers)}
++
++            # Identify column indices -- use the actual header names
++            # E3 file: "SwissProt AC (E3)", DUB file: "SwissProt AC (DUB)"
++            enzyme_ac_idx = None
++            enzyme_gene_idx = None
++            enzyme_type_idx = None
++            for h, i in col.items():
++                if h.startswith("SwissProt AC (E3") or h.startswith("SwissProt AC (DUB"):
++                    enzyme_ac_idx = i
++                if h.startswith("Gene Symbol (E3") or h.startswith("Gene Symbol (DUB"):
++                    enzyme_gene_idx = i
++                if h == "E3TYPE" or h == "DUBTYPE":
++                    enzyme_type_idx = i
++
++            substrate_ac_idx = col.get("SwissProt AC (Substrate)")
++            substrate_gene_idx = col.get("Gene Symbol (Substrate)")
++            source_idx = col.get("SOURCE")
++            sourceid_idx = col.get("SOURCEID")
++            species_idx = col.get("species")
++            type_idx = col.get("type")
++
++            if enzyme_ac_idx is None or substrate_ac_idx is None:
++                logger.warning(f"UbiNet: Could not find required columns in {fpath.name}")
++                return
++
++            for line in fh:
++                parts = line.rstrip("\n").split("\t")
++                max_needed = max(enzyme_ac_idx, substrate_ac_idx)
++                if len(parts) <= max_needed:
++                    continue
++
++                enzyme_ac = parts[enzyme_ac_idx].strip()
++                substrate_ac = parts[substrate_ac_idx].strip()
++                if not enzyme_ac or not substrate_ac:
++                    continue
++
++                key = (enzyme_ac, substrate_ac, interaction_type)
++                if key in self._seen_keys:
++                    continue
++                self._seen_keys.add(key)
++
++                enzyme_gene = parts[enzyme_gene_idx].strip() if enzyme_gene_idx is not None and enzyme_gene_idx < len(parts) else ""
++                substrate_gene = parts[substrate_gene_idx].strip() if substrate_gene_idx is not None and substrate_gene_idx < len(parts) else ""
++                etype = parts[enzyme_type_idx].strip() if enzyme_type_idx is not None and enzyme_type_idx < len(parts) else ""
++                source = parts[source_idx].strip() if source_idx is not None and source_idx < len(parts) else ""
++                sourceid = parts[sourceid_idx].strip() if sourceid_idx is not None and sourceid_idx < len(parts) else ""
++                species = parts[species_idx].strip() if species_idx is not None and species_idx < len(parts) else ""
++                int_subtype = parts[type_idx].strip() if type_idx is not None and type_idx < len(parts) else ""
++
++                self.interactions.append({
++                    "enzyme_ac": enzyme_ac,
++                    "enzyme_gene": enzyme_gene,
++                    "substrate_ac": substrate_ac,
++                    "substrate_gene": substrate_gene,
++                    "interaction_type": interaction_type,
++                    "enzyme_class": etype,
++                    "source": source,
++                    "pmid": sourceid,
++                    "species": species,
++                    "subtype": int_subtype,
++                })
+ 
++    # ------------------------------------------------------------------
++    # BioCypher interface
++    # ------------------------------------------------------------------
+     def get_nodes(self):
+-        logger.info("UbiNet: No dedicated nodes")
++        logger.info("UbiNet: No dedicated nodes (uses existing protein nodes)")
+         return
+         yield
+ 
+@@ -74,16 +147,28 @@ class UbiNetAdapter:
+         logger.info("UbiNet: Generating ProteinHasPTM edges (ubiquitination)...")
+         count = 0
+         for ix in self.interactions:
++            edge_id = f"ubinet:{ix['enzyme_ac']}_{ix['substrate_ac']}_{ix['interaction_type']}"
++            ptm_type = "ubiquitination" if ix["interaction_type"] == "E3-substrate" else "deubiquitination"
+             props = {
+-                'site': '',
+-                'ptm_type': 'Ubiquitination',
+-                'residue': '',
+-                'score': 0,
+-                'enzymes': self._sanitize(ix['e3']),
+-                'pmids': self._sanitize(ix['pmid']),
+-                'source': 'UbiNet',
++                "site": "",
++                "ptm_type": ptm_type,
++                "residue": "",
++                "score": 0,
++                "enzymes": self._sanitize(ix["enzyme_gene"]),
++                "enzyme_uniprot": ix["enzyme_ac"],
++                "enzyme_class": self._sanitize(ix["enzyme_class"]),
++                "interaction_type": ix["interaction_type"],
++                "pmids": self._sanitize(ix["pmid"]),
++                "source": "UbiNet",
++                "species": self._sanitize(ix["species"]),
+             }
+-            yield (None, ix['substrate'], f"ubi:{ix['e3']}_{ix['substrate']}",
+-                   "ProteinHasPTM", props)
++            # source=enzyme protein, target=substrate protein
++            yield (
++                None,
++                ix["substrate_ac"],
++                ix["substrate_gene"] if ix["substrate_gene"] else ix["substrate_ac"],
++                "ProteinHasPTM",
++                props,
++            )
+             count += 1
+         logger.info(f"UbiNet: Generated {count} ProteinHasPTM edges")

@@ -1,0 +1,1416 @@
+diff --git a/template_package/adapters/adhesome_adapter.py b/template_package/adapters/adhesome_adapter.py
+index 44bf123..22370cf 100644
+--- a/template_package/adapters/adhesome_adapter.py
++++ b/template_package/adapters/adhesome_adapter.py
+@@ -2,11 +2,13 @@
+ Adhesome Adapter for BioCypher.
+ 
+ Loads cell adhesion component and interaction data from Adhesome.org.
+-The adhesome is the collection of proteins involved in cell-matrix
+-and cell-cell adhesion signaling.
++Data files:
++- adhesome_components.csv (233 components with functional categories)
++- adhesome_interactions.csv (6,543 protein-protein interactions)
+ 
+-Note: Data files may contain download errors (e.g. "404: Not Found").
+-In that case, this adapter gracefully handles empty/invalid data.
++Generates:
++- AdhesomeComponent nodes from components file
++- AdhesomeInteraction edges from interactions file
+ """
+ 
+ import csv
+@@ -17,9 +19,6 @@ from biocypher._logger import logger
+ class AdhesomeAdapter:
+     def __init__(self, data_dir="template_package/data/adhesome"):
+         self.data_dir = Path(data_dir)
+-        self.components = []
+-        self.interactions = []
+-        self._load_data()
+ 
+     def _sanitize(self, text):
+         if text is None:
+@@ -29,86 +28,87 @@ class AdhesomeAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
+-    def _load_data(self):
+-        """Load adhesome components and interactions."""
+-        # Load components
+-        comp_path = self.data_dir / 'components.csv'
+-        if comp_path.exists():
+-            try:
+-                with open(comp_path, 'r', encoding='utf-8') as f:
+-                    content = f.read().strip()
+-                    if content.startswith('404') or len(content) < 50:
+-                        logger.warning("Adhesome: components.csv appears invalid (likely download error)")
+-                    else:
+-                        f.seek(0)
+-                        reader = csv.DictReader(f)
+-                        for row in reader:
+-                            self.components.append(row)
+-                        logger.info(f"Adhesome: Loaded {len(self.components)} components")
+-            except Exception as e:
+-                logger.warning(f"Adhesome: Error reading components.csv: {e}")
+-
+-        # Load interactions
+-        int_path = self.data_dir / 'interactions.csv'
+-        if int_path.exists():
+-            try:
+-                with open(int_path, 'r', encoding='utf-8') as f:
+-                    content = f.read().strip()
+-                    if content.startswith('404') or len(content) < 50:
+-                        logger.warning("Adhesome: interactions.csv appears invalid (likely download error)")
+-                    else:
+-                        f.seek(0)
+-                        reader = csv.DictReader(f)
+-                        for row in reader:
+-                            self.interactions.append(row)
+-                        logger.info(f"Adhesome: Loaded {len(self.interactions)} interactions")
+-            except Exception as e:
+-                logger.warning(f"Adhesome: Error reading interactions.csv: {e}")
+-
+-        if not self.components and not self.interactions:
+-            logger.warning("Adhesome: No valid data loaded (files may have failed to download)")
+-
+     def get_nodes(self):
+-        """Generate adhesome component nodes (if data is valid)."""
+-        logger.info(f"Adhesome: Generating nodes from {len(self.components)} components...")
++        """
++        Generate AdhesomeComponent nodes from adhesome_components.csv.
++        Columns: Official Symbol, Gene ID, Protein name, Swiss-Prot ID,
++                 Synonyms, Functional Category, FA
++        Yields: (id, label, properties)
++        """
++        comp_path = self.data_dir / 'adhesome_components.csv'
++        if not comp_path.exists():
++            logger.warning("Adhesome: adhesome_components.csv not found")
++            return
++
++        logger.info("Adhesome: Generating AdhesomeComponent nodes...")
+         count = 0
+ 
+-        for comp in self.components:
+-            gene_name = comp.get('Official Symbol', comp.get('Gene', '')).strip()
+-            if not gene_name:
+-                continue
+-
+-            uniprot = comp.get('Swiss-Prot ID', comp.get('UniProt', '')).strip()
+-            node_id = uniprot if uniprot else gene_name
+-
+-            props = {
+-                'gene_name': self._sanitize(gene_name),
+-                'functional_category': self._sanitize(comp.get('Functional Category', '')),
+-                'source': 'Adhesome',
+-            }
+-
+-            yield (node_id, "Gene", props)
+-            count += 1
+-
+-        logger.info(f"Adhesome: Generated {count} Gene nodes")
++        with open(comp_path, 'r', encoding='utf-8') as f:
++            reader = csv.DictReader(f)
++            for row in reader:
++                gene_symbol = row.get('Official Symbol', '').strip()
++                if not gene_symbol:
++                    continue
++
++                gene_id = row.get('Gene ID', '').strip()
++                protein_name = self._sanitize(row.get('Protein name', ''))
++                uniprot_id = row.get('Swiss-Prot ID', '').strip()
++                synonyms = self._sanitize(row.get('Synonyms', ''))
++                func_category = self._sanitize(row.get('Functional Category', ''))
++                fa_class = self._sanitize(row.get('FA', ''))
++
++                node_id = uniprot_id if uniprot_id else gene_symbol
++
++                props = {
++                    'gene_symbol': gene_symbol,
++                    'gene_id': gene_id,
++                    'protein_name': protein_name,
++                    'uniprot_id': uniprot_id,
++                    'synonyms': synonyms,
++                    'functional_category': func_category,
++                    'fa_class': fa_class,
++                    'source': 'Adhesome',
++                }
++                yield (node_id, "AdhesomeComponent", props)
++                count += 1
++
++        logger.info(f"Adhesome: Generated {count} AdhesomeComponent nodes")
+ 
+     def get_edges(self):
+-        """Generate adhesome interaction edges (if data is valid)."""
+-        logger.info(f"Adhesome: Generating edges from {len(self.interactions)} interactions...")
++        """
++        Generate AdhesomeInteraction edges from adhesome_interactions.csv.
++        Columns: Source, Target, Effect, Type, PMID, data_source
++        Yields: (id, source, target, label, properties)
++        """
++        int_path = self.data_dir / 'adhesome_interactions.csv'
++        if not int_path.exists():
++            logger.warning("Adhesome: adhesome_interactions.csv not found")
++            return
++
++        logger.info("Adhesome: Generating AdhesomeInteraction edges...")
+         count = 0
+ 
+-        for inter in self.interactions:
+-            source = inter.get('Source', '').strip()
+-            target = inter.get('Target', '').strip()
+-            if not source or not target:
+-                continue
+-
+-            props = {
+-                'interaction_type': self._sanitize(inter.get('Type', '')),
+-                'source_db': 'Adhesome',
+-            }
+-
+-            yield (None, source, target, "AdhesomeInteraction", props)
+-            count += 1
+-
+-        logger.info(f"Adhesome: Generated {count} edges")
++        with open(int_path, 'r', encoding='utf-8') as f:
++            reader = csv.DictReader(f)
++            for row in reader:
++                source = row.get('Source', '').strip()
++                target = row.get('Target', '').strip()
++                if not source or not target:
++                    continue
++
++                effect = self._sanitize(row.get('Effect', ''))
++                interaction_type = self._sanitize(row.get('Type', ''))
++                pmid = row.get('PMID', '').strip()
++                data_source = row.get('data_source', '').strip()
++
++                props = {
++                    'effect': effect,
++                    'interaction_type': interaction_type,
++                    'pmid': pmid,
++                    'data_source': data_source,
++                    'source_db': 'Adhesome',
++                }
++                yield (None, source, target, "AdhesomeInteraction", props)
++                count += 1
++
++        logger.info(f"Adhesome: Generated {count} AdhesomeInteraction edges")
+diff --git a/template_package/adapters/appris_adapter.py b/template_package/adapters/appris_adapter.py
+index 5d6f222..ea5983e 100644
+--- a/template_package/adapters/appris_adapter.py
++++ b/template_package/adapters/appris_adapter.py
+@@ -2,12 +2,17 @@
+ APPRIS Adapter for BioCypher.
+ 
+ Loads APPRIS principal isoform annotations and generates:
+-- PrincipalIsoform edges (gene → transcript principal isoform annotation)
++- PrincipalIsoform edges (gene -> transcript principal isoform annotation)
++
++Data files:
++- appris_data.principal.txt  (36K isoform designations with PRINCIPAL/ALTERNATIVE labels)
++- appris_data.appris.txt     (172K full scoring with detailed domain/structure scores)
+ 
+ APPRIS annotates splice isoforms for protein-coding genes, identifying
+ principal functional isoforms based on structure, function, and conservation.
+ """
+ 
++import gzip
+ from pathlib import Path
+ from biocypher._logger import logger
+ 
+@@ -15,7 +20,8 @@ from biocypher._logger import logger
+ class APPRISAdapter:
+     def __init__(self, data_dir="template_package/data/appris"):
+         self.data_dir = Path(data_dir)
+-        self.isoforms = []
++        self.principal_isoforms = []
++        self.full_scores = []
+         self._load_data()
+ 
+     def _sanitize(self, text):
+@@ -27,18 +33,28 @@ class APPRISAdapter:
+         return text.strip()
+ 
+     def _load_data(self):
+-        """Load APPRIS principal isoform data."""
+-        path = self.data_dir / 'appris_principal.txt'
++        """Load APPRIS principal isoform and full scoring data."""
++        self._load_principal()
++        self._load_full_scores()
++
++    def _load_principal(self):
++        """Load appris_data.principal.txt - compact isoform designations."""
++        path = self.data_dir / 'appris_data.principal.txt'
+         if not path.exists():
+-            logger.warning("APPRIS: principal isoform data not found")
++            logger.warning("APPRIS: appris_data.principal.txt not found")
+             return
+ 
+         logger.info("APPRIS: Loading principal isoform annotations...")
+         count = 0
+ 
+         with open(path, 'r', encoding='utf-8') as f:
++            # Skip header line
++            header = f.readline()
+             for line in f:
+-                parts = line.strip().split('\t')
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split('\t')
+                 if len(parts) < 5:
+                     continue
+ 
+@@ -52,7 +68,7 @@ class APPRISAdapter:
+                 if not gene_id or not transcript_id:
+                     continue
+ 
+-                self.isoforms.append({
++                self.principal_isoforms.append({
+                     'gene_name': gene_name,
+                     'gene_id': gene_id,
+                     'transcript_id': transcript_id,
+@@ -62,28 +78,109 @@ class APPRISAdapter:
+                 })
+                 count += 1
+ 
+-        logger.info(f"APPRIS: Loaded {count} isoform annotations")
++        logger.info(f"APPRIS: Loaded {count} principal isoform annotations")
++
++    def _load_full_scores(self):
++        """Load appris_data.appris.txt - full scoring with domain/structure details."""
++        path = self.data_dir / 'appris_data.appris.txt'
++        if not path.exists():
++            logger.warning("APPRIS: appris_data.appris.txt not found")
++            return
++
++        logger.info("APPRIS: Loading full scoring data...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            header = f.readline().strip().split('\t')
++            for line in f:
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split('\t')
++                if len(parts) < 10:
++                    continue
++
++                gene_id = parts[0].strip()
++                gene_name = parts[1].strip()
++                transcript_id = parts[2].strip()
++                translation_id = parts[3].strip()
++                is_translated = parts[4].strip()
++                transcript_type = parts[5].strip()
++
++                # Skip non-translated transcripts (no protein product)
++                if is_translated == 'NO_TRANSLATION':
++                    continue
++
++                ccds_id = parts[7].strip() if len(parts) > 7 else ''
++                tsl = parts[8].strip() if len(parts) > 8 else ''
++                protein_length = parts[9].strip() if len(parts) > 9 else ''
++                firestar = parts[10].strip() if len(parts) > 10 else ''
++                matador = parts[11].strip() if len(parts) > 11 else ''
++                corsair = parts[12].strip() if len(parts) > 12 else ''
++                spade = parts[13].strip() if len(parts) > 13 else ''
++                thump = parts[14].strip() if len(parts) > 14 else ''
++                crash = parts[15].strip() if len(parts) > 15 else ''
++                trifid = parts[16].strip() if len(parts) > 16 else ''
++                appris_score = parts[18].strip() if len(parts) > 18 else ''
++                appris_annotation = parts[19].strip() if len(parts) > 19 else ''
++
++                if not gene_id or not transcript_id:
++                    continue
++
++                self.full_scores.append({
++                    'gene_id': gene_id,
++                    'gene_name': gene_name,
++                    'transcript_id': transcript_id,
++                    'translation_id': translation_id,
++                    'transcript_type': transcript_type,
++                    'ccds_id': ccds_id,
++                    'tsl': tsl,
++                    'protein_length': protein_length,
++                    'firestar_score': firestar,
++                    'matador_score': matador,
++                    'corsair_score': corsair,
++                    'spade_score': spade,
++                    'thump_score': thump,
++                    'crash_score': crash,
++                    'trifid_score': trifid,
++                    'appris_score': appris_score,
++                    'annotation': appris_annotation,
++                })
++                count += 1
++
++        logger.info(f"APPRIS: Loaded {count} full scoring records")
+ 
+     def get_nodes(self):
+-        """No new nodes."""
++        """No new nodes - genes and transcripts are assumed to exist."""
+         logger.info("APPRIS: No new nodes")
+         return iter([])
+ 
+     def get_edges(self):
+         """
+-        Generate PrincipalIsoform edges.
++        Generate PrincipalIsoform edges from both data files.
++
++        First yields edges from the principal isoform file (compact designations),
++        then yields detailed scoring edges from the full appris file.
++
+         Yields: (id, source, target, label, properties)
++          - source: Ensembl Gene ID
++          - target: Ensembl Transcript ID
+         """
+         logger.info("APPRIS: Generating edges...")
+         count = 0
++        seen = set()
+ 
+-        for iso in self.isoforms:
++        # Primary edges from principal isoform file
++        for iso in self.principal_isoforms:
++            edge_key = (iso['gene_id'], iso['transcript_id'])
++            seen.add(edge_key)
+             props = {
+                 'gene_name': self._sanitize(iso['gene_name']),
+                 'ccds_id': iso['ccds_id'],
+                 'appris_annotation': iso['annotation'],
+                 'mane_status': iso['mane'],
+                 'source': 'APPRIS',
++                'data_file': 'principal',
+             }
+ 
+             yield (
+@@ -95,4 +192,40 @@ class APPRISAdapter:
+             )
+             count += 1
+ 
++        # Supplementary edges from full scoring file (only for transcripts not in principal)
++        for rec in self.full_scores:
++            edge_key = (rec['gene_id'], rec['transcript_id'])
++            if edge_key in seen:
++                continue
++            seen.add(edge_key)
++
++            props = {
++                'gene_name': self._sanitize(rec['gene_name']),
++                'translation_id': rec['translation_id'],
++                'transcript_type': rec['transcript_type'],
++                'ccds_id': rec['ccds_id'],
++                'transcript_support_level': rec['tsl'],
++                'protein_length': rec['protein_length'],
++                'firestar_score': rec['firestar_score'],
++                'matador_score': rec['matador_score'],
++                'corsair_score': rec['corsair_score'],
++                'spade_score': rec['spade_score'],
++                'thump_score': rec['thump_score'],
++                'crash_score': rec['crash_score'],
++                'trifid_score': rec['trifid_score'],
++                'appris_score': rec['appris_score'],
++                'appris_annotation': rec['annotation'],
++                'source': 'APPRIS',
++                'data_file': 'full_scoring',
++            }
++
++            yield (
++                None,
++                rec['gene_id'],
++                rec['transcript_id'],
++                "PrincipalIsoform",
++                props
++            )
++            count += 1
++
+         logger.info(f"APPRIS: Generated {count} PrincipalIsoform edges")
+diff --git a/template_package/adapters/ernabase_adapter.py b/template_package/adapters/ernabase_adapter.py
+index b88943b..eb6a66a 100644
+--- a/template_package/adapters/ernabase_adapter.py
++++ b/template_package/adapters/ernabase_adapter.py
+@@ -1,9 +1,16 @@
+ """
+ Enhancer RNA Adapter for BioCypher.
+-Stub adapter for enhancer RNA data. Ready to load when data becomes available.
++
++Loads FANTOM5 enhancer region data from BED format and generates:
++- EnhancerRegion nodes (genomic regions identified as enhancers)
++
++Data files:
++- fantom5_enhancers.bed.gz  (63K enhancer regions in BED12 format)
++
++Each line represents an enhancer region with genomic coordinates,
++expression score, and block structure.
+ """
+ 
+-import json
+ import gzip
+ from pathlib import Path
+ from biocypher._logger import logger
+@@ -12,7 +19,7 @@ from biocypher._logger import logger
+ class ERNAbaseAdapter:
+     def __init__(self, data_dir="template_package/data/ernabase"):
+         self.data_dir = Path(data_dir)
+-        self.entries = []
++        self.enhancers = []
+         self._load_data()
+ 
+     def _sanitize(self, text):
+@@ -24,53 +31,90 @@ class ERNAbaseAdapter:
+         return text.strip()
+ 
+     def _load_data(self):
+-        if not self.data_dir.exists():
+-            logger.warning("ERNAbaseAdapter: data directory not found")
++        """Load FANTOM5 enhancer BED data."""
++        path = self.data_dir / 'fantom5_enhancers.bed.gz'
++        if not path.exists():
++            logger.warning("ERNAbase: fantom5_enhancers.bed.gz not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv")) + list(self.data_dir.glob("*.csv"))
+-                      + list(self.data_dir.glob("*.txt")) + list(self.data_dir.glob("*.json"))
+-                      + list(self.data_dir.glob("*.tsv.gz")))
+-        for fpath in candidates:
+-            try:
+-                if fpath.suffix == '.json':
+-                    with open(fpath, 'r') as f:
+-                        data = json.load(f)
+-                    if isinstance(data, list):
+-                        self.entries.extend(data)
+-                elif str(fpath).endswith('.gz'):
+-                    with gzip.open(fpath, 'rt', errors='replace') as f:
+-                        first = f.readline()
+-                        if first.startswith('<'): continue
+-                        f.seek(0)
+-                        self._parse_tsv(f)
+-                else:
+-                    with open(fpath, 'r', errors='replace') as f:
+-                        first = f.readline()
+-                        if first.startswith('<'): continue
+-                        f.seek(0)
+-                        self._parse_tsv(f)
+-            except Exception as e:
+-                logger.warning(f"ERNAbaseAdapter: Error reading {fpath}: {e}")
+-        logger.info(f"ERNAbaseAdapter: Loaded {len(self.entries)} entries")
+-
+-    def _parse_tsv(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line: continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) >= 2:
+-                self.entries.append(dict(zip(header, parts)))
++
++        logger.info("ERNAbase: Loading FANTOM5 enhancer regions...")
++        count = 0
++
++        with gzip.open(path, 'rt', encoding='utf-8') as f:
++            for line in f:
++                line = line.strip()
++                if not line or line.startswith('#') or line.startswith('track'):
++                    continue
++
++                parts = line.split('\t')
++                # BED12 format: chr, start, end, name, score, strand,
++                #               thickStart, thickEnd, rgb, blockCount, blockSizes, blockStarts
++                if len(parts) < 4:
++                    continue
++
++                chrom = parts[0]
++                start = int(parts[1])
++                end = int(parts[2])
++                name = parts[3] if len(parts) > 3 else f"{chrom}:{start}-{end}"
++                score = int(parts[4]) if len(parts) > 4 else 0
++                strand = parts[5] if len(parts) > 5 else '.'
++                thick_start = int(parts[6]) if len(parts) > 6 else start
++                thick_end = int(parts[7]) if len(parts) > 7 else end
++                block_count = int(parts[9]) if len(parts) > 9 else 1
++                block_sizes = parts[10] if len(parts) > 10 else ''
++                block_starts = parts[11] if len(parts) > 11 else ''
++
++                self.enhancers.append({
++                    'chrom': chrom,
++                    'start': start,
++                    'end': end,
++                    'name': name,
++                    'score': score,
++                    'strand': strand,
++                    'thick_start': thick_start,
++                    'thick_end': thick_end,
++                    'block_count': block_count,
++                    'block_sizes': block_sizes,
++                    'block_starts': block_starts,
++                    'length': end - start,
++                })
++                count += 1
++
++        logger.info(f"ERNAbase: Loaded {count} enhancer regions")
+ 
+     def get_nodes(self):
+-        logger.info("ERNAbaseAdapter: No dedicated nodes")
+-        return
+-        yield
++        """
++        Generate EnhancerRegion nodes from FANTOM5 BED data.
++
++        Yields: (id, label, properties)
++          - id: enhancer region name (e.g., chr10:100006233-100006603)
++        """
++        logger.info("ERNAbase: Generating EnhancerRegion nodes...")
++        count = 0
++
++        for enh in self.enhancers:
++            node_id = enh['name']
++            props = {
++                'chr': enh['chrom'],
++                'start': enh['start'],
++                'end': enh['end'],
++                'length': enh['length'],
++                'score': enh['score'],
++                'strand': enh['strand'],
++                'thick_start': enh['thick_start'],
++                'thick_end': enh['thick_end'],
++                'block_count': enh['block_count'],
++                'block_sizes': enh['block_sizes'],
++                'block_starts': enh['block_starts'],
++                'source': 'FANTOM5',
++            }
++
++            yield (node_id, "EnhancerRegion", props)
++            count += 1
++
++        logger.info(f"ERNAbase: Generated {count} EnhancerRegion nodes")
+ 
+     def get_edges(self):
+-        logger.info("ERNAbaseAdapter: No data loaded yet")
+-        return
+-        yield
++        """No edges - enhancer regions are standalone nodes."""
++        logger.info("ERNAbase: No edges")
++        return iter([])
+diff --git a/template_package/adapters/exocarta_adapter.py b/template_package/adapters/exocarta_adapter.py
+index 8846419..27ef018 100644
+--- a/template_package/adapters/exocarta_adapter.py
++++ b/template_package/adapters/exocarta_adapter.py
+@@ -2,7 +2,7 @@
+ ExoCarta (Exosome Database) Adapter for BioCypher.
+ 
+ Loads ExoCarta exosome cargo data and generates:
+-- ExosomeProtein edges (gene → exosome detection with species and methods)
++- GeneInExosome edges (gene detected in exosome, Homo sapiens only)
+ 
+ ExoCarta catalogs proteins, mRNAs, and lipids identified in exosomes
+ from various cell types and biological fluids.
+@@ -16,8 +16,6 @@ from biocypher._logger import logger
+ class ExoCartaAdapter:
+     def __init__(self, data_dir="template_package/data/exocarta"):
+         self.data_dir = Path(data_dir)
+-        self.proteins = []   # [{gene_symbol, species, methods, content_type}]
+-        self._load_data()
+ 
+     def _sanitize(self, text):
+         if text is None:
+@@ -27,19 +25,36 @@ class ExoCartaAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
+-    def _load_data(self):
+-        """Load ExoCarta protein/mRNA details."""
++    def get_nodes(self):
++        """
++        No new nodes - ExoCarta genes link to existing Gene nodes.
++        """
++        logger.info("ExoCarta: No new nodes (uses existing gene nodes)")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate GeneInExosome edges from EXOCARTA_PROTEIN_MRNA_DETAILS_5.txt.
++        Filters for Homo sapiens only. Aggregates by gene symbol, collecting
++        content types and detection methods.
++        Yields: (id, source, target, label, properties)
++        """
+         path = self.data_dir / 'EXOCARTA_PROTEIN_MRNA_DETAILS_5.txt'
+         if not path.exists():
+-            logger.warning("ExoCarta: protein/mRNA file not found")
++            logger.warning("ExoCarta: EXOCARTA_PROTEIN_MRNA_DETAILS_5.txt not found")
+             return
+ 
+-        logger.info("ExoCarta: Loading exosome cargo data...")
+-        count = 0
++        logger.info("ExoCarta: Loading and aggregating human exosome cargo data...")
++
++        # First pass: aggregate by gene symbol for Homo sapiens
++        gene_data = {}
++        total = 0
++        kept = 0
+ 
+         with open(path, 'r', encoding='utf-8') as f:
+             reader = csv.DictReader(f, delimiter='\t')
+             for row in reader:
++                total += 1
+                 gene_symbol = row.get('GENE SYMBOL', '').strip()
+                 species = row.get('SPECIES', '').strip()
+                 content_type = row.get('CONTENT TYPE', '').strip()
+@@ -48,58 +63,32 @@ class ExoCartaAdapter:
+ 
+                 if not gene_symbol:
+                     continue
+-
+-                # Focus on human and mouse
+-                if 'sapiens' not in species and 'musculus' not in species:
++                if species != 'Homo sapiens':
+                     continue
+ 
+-                self.proteins.append({
+-                    'gene_symbol': gene_symbol,
+-                    'entrez_id': entrez_id,
+-                    'species': species,
+-                    'content_type': content_type,
+-                    'methods': self._sanitize(methods),
+-                })
+-                count += 1
+-
+-        logger.info(f"ExoCarta: Loaded {count} exosome cargo entries (human/mouse)")
+-
+-    def get_nodes(self):
+-        """
+-        No new nodes - ExoCarta genes link to existing Gene nodes.
+-        Yields nothing.
+-        """
+-        logger.info("ExoCarta: No new nodes (uses existing gene nodes)")
+-        return iter([])
+-
+-    def get_edges(self):
+-        """
+-        Generate GeneInExosome edges (deduplicated by gene+species).
+-        Yields: (id, source, target, label, properties)
+-        """
+-        logger.info("ExoCarta: Generating edges...")
+-
+-        # Aggregate: for each gene+species, collect content types and methods
+-        gene_data = {}
+-        for p in self.proteins:
+-            key = (p['gene_symbol'], p['species'])
+-            if key not in gene_data:
+-                gene_data[key] = {
+-                    'entrez_id': p['entrez_id'],
+-                    'content_types': set(),
+-                    'methods': set(),
+-                    'count': 0,
+-                }
+-            gene_data[key]['content_types'].add(p['content_type'])
+-            for m in p['methods'].split('|'):
+-                if m.strip():
+-                    gene_data[key]['methods'].add(m.strip())
+-            gene_data[key]['count'] += 1
+-
++                kept += 1
++                if gene_symbol not in gene_data:
++                    gene_data[gene_symbol] = {
++                        'entrez_id': entrez_id,
++                        'content_types': set(),
++                        'methods': set(),
++                        'count': 0,
++                    }
++                gene_data[gene_symbol]['content_types'].add(content_type)
++                for m in methods.split('|'):
++                    m = m.strip()
++                    if m:
++                        gene_data[gene_symbol]['methods'].add(m)
++                gene_data[gene_symbol]['count'] += 1
++
++        logger.info(f"ExoCarta: {kept} human entries from {total} total, "
++                     f"{len(gene_data)} unique genes")
++
++        # Second pass: yield deduplicated edges
+         count = 0
+-        for (gene_symbol, species), data in gene_data.items():
++        for gene_symbol, data in gene_data.items():
+             props = {
+-                'species': species,
++                'entrez_id': data['entrez_id'],
+                 'content_types': '|'.join(sorted(data['content_types'])),
+                 'detection_methods': '|'.join(sorted(data['methods'])),
+                 'num_experiments': data['count'],
+@@ -109,9 +98,9 @@ class ExoCartaAdapter:
+             yield (
+                 None,
+                 gene_symbol,
+-                f"EXOSOME:{species.replace(' ', '_')}",
++                "EXOSOME:Homo_sapiens",
+                 "GeneInExosome",
+-                props
++                props,
+             )
+             count += 1
+ 
+diff --git a/template_package/adapters/nucome_adapter.py b/template_package/adapters/nucome_adapter.py
+index d1a17ed..0c6b6b0 100644
+--- a/template_package/adapters/nucome_adapter.py
++++ b/template_package/adapters/nucome_adapter.py
+@@ -1,9 +1,17 @@
+ """
+-Nucleosome Adapter for BioCypher.
+-Stub adapter for nucleosome data. Ready to load when data becomes available.
++NuCOME (Nucleosome Organization Mapped across Epigenomes) Adapter for BioCypher.
++
++Loads nucleosome positioning data (NPS = Nucleosome Positioning from Sequencing)
++from CD34+ hematopoietic stem cells and generates:
++- NucleosomePosition nodes (genomic positions of nucleosomes)
++
++Data files:
++- GSM651559_cd34_nucs_NPS.txt.gz  (2.5M nucleosome positions)
++
++Columns: chr, start, end, summit, Most_likely_position, Tag_density,
++         #Tag_positive_strand, #Tag_negative_strand, NPS_ID, -10(log10p-value)
+ """
+ 
+-import json
+ import gzip
+ from pathlib import Path
+ from biocypher._logger import logger
+@@ -12,7 +20,7 @@ from biocypher._logger import logger
+ class NUCOMEAdapter:
+     def __init__(self, data_dir="template_package/data/nucome"):
+         self.data_dir = Path(data_dir)
+-        self.entries = []
++        self.nucleosomes = []
+         self._load_data()
+ 
+     def _sanitize(self, text):
+@@ -24,53 +32,87 @@ class NUCOMEAdapter:
+         return text.strip()
+ 
+     def _load_data(self):
+-        if not self.data_dir.exists():
+-            logger.warning("NUCOMEAdapter: data directory not found")
++        """Load nucleosome positioning data from NPS output."""
++        path = self.data_dir / 'GSM651559_cd34_nucs_NPS.txt.gz'
++        if not path.exists():
++            logger.warning("NuCOME: GSM651559_cd34_nucs_NPS.txt.gz not found")
+             return
+-        candidates = (list(self.data_dir.glob("*.tsv")) + list(self.data_dir.glob("*.csv"))
+-                      + list(self.data_dir.glob("*.txt")) + list(self.data_dir.glob("*.json"))
+-                      + list(self.data_dir.glob("*.tsv.gz")))
+-        for fpath in candidates:
+-            try:
+-                if fpath.suffix == '.json':
+-                    with open(fpath, 'r') as f:
+-                        data = json.load(f)
+-                    if isinstance(data, list):
+-                        self.entries.extend(data)
+-                elif str(fpath).endswith('.gz'):
+-                    with gzip.open(fpath, 'rt', errors='replace') as f:
+-                        first = f.readline()
+-                        if first.startswith('<'): continue
+-                        f.seek(0)
+-                        self._parse_tsv(f)
+-                else:
+-                    with open(fpath, 'r', errors='replace') as f:
+-                        first = f.readline()
+-                        if first.startswith('<'): continue
+-                        f.seek(0)
+-                        self._parse_tsv(f)
+-            except Exception as e:
+-                logger.warning(f"NUCOMEAdapter: Error reading {fpath}: {e}")
+-        logger.info(f"NUCOMEAdapter: Loaded {len(self.entries)} entries")
+-
+-    def _parse_tsv(self, fh):
+-        header = None
+-        for line in fh:
+-            line = line.strip()
+-            if not line: continue
+-            parts = line.split('\t')
+-            if header is None:
+-                header = parts
+-                continue
+-            if len(parts) >= 2:
+-                self.entries.append(dict(zip(header, parts)))
++
++        logger.info("NuCOME: Loading nucleosome positions from CD34+ cells...")
++        count = 0
++
++        with gzip.open(path, 'rt', encoding='utf-8') as f:
++            # Skip header line
++            header = f.readline()
++            for line in f:
++                line = line.strip()
++                if not line:
++                    continue
++                parts = line.split('\t')
++                if len(parts) < 10:
++                    continue
++
++                chrom = parts[0]
++                start = int(parts[1])
++                end = int(parts[2])
++                summit = int(parts[3])
++                most_likely_pos = int(parts[4])
++                tag_density = float(parts[5])
++                tags_pos_strand = int(parts[6])
++                tags_neg_strand = int(parts[7])
++                nps_id = parts[8]
++                neg10_log10_pval = float(parts[9])
++
++                self.nucleosomes.append({
++                    'chrom': chrom,
++                    'start': start,
++                    'end': end,
++                    'summit': summit,
++                    'most_likely_position': most_likely_pos,
++                    'tag_density': tag_density,
++                    'tags_positive_strand': tags_pos_strand,
++                    'tags_negative_strand': tags_neg_strand,
++                    'nps_id': nps_id,
++                    'neg10_log10_pvalue': neg10_log10_pval,
++                    'length': end - start,
++                })
++                count += 1
++
++        logger.info(f"NuCOME: Loaded {count} nucleosome positions")
+ 
+     def get_nodes(self):
+-        logger.info("NUCOMEAdapter: No dedicated nodes")
+-        return
+-        yield
++        """
++        Generate NucleosomePosition nodes.
++
++        Yields: (id, label, properties)
++          - id: NPS_ID (e.g., nucleosome960816)
++        """
++        logger.info("NuCOME: Generating NucleosomePosition nodes...")
++        count = 0
++
++        for nuc in self.nucleosomes:
++            node_id = nuc['nps_id']
++            props = {
++                'chr': nuc['chrom'],
++                'start': nuc['start'],
++                'end': nuc['end'],
++                'length': nuc['length'],
++                'summit': nuc['summit'],
++                'most_likely_position': nuc['most_likely_position'],
++                'tag_density': nuc['tag_density'],
++                'tags_positive_strand': nuc['tags_positive_strand'],
++                'tags_negative_strand': nuc['tags_negative_strand'],
++                'neg10_log10_pvalue': nuc['neg10_log10_pvalue'],
++                'cell_type': 'CD34+',
++                'source': 'NuCOME',
++            }
++
++            yield (node_id, "NucleosomePosition", props)
++            count += 1
++
++        logger.info(f"NuCOME: Generated {count} NucleosomePosition nodes")
+ 
+     def get_edges(self):
+-        logger.info("NUCOMEAdapter: No data loaded yet")
+-        return
+-        yield
++        """No edges - nucleosome positions are standalone nodes."""
++        logger.info("NuCOME: No edges")
++        return iter([])
+diff --git a/template_package/adapters/raftprot_adapter.py b/template_package/adapters/raftprot_adapter.py
+index 6a3f56b..1ea6553 100644
+--- a/template_package/adapters/raftprot_adapter.py
++++ b/template_package/adapters/raftprot_adapter.py
+@@ -1,16 +1,17 @@
+ """
+ RaftProt Adapter for BioCypher.
+ 
+-Loads lipid raft proteomics data from RaftProt (https://raftprot.org/).
+-RaftProt is a database of mammalian lipid raft-associated proteins
+-identified through detergent-resistant membrane (DRM) proteomics.
++Loads lipid raft proteomics data from RaftProt v2.4 (https://raftprot.org/).
++RaftProt catalogs mammalian lipid raft-associated proteins identified
++through detergent-resistant membrane (DRM) proteomics.
++
++Data: Raftprot.v2.4.txt (space-delimited, quoted fields)
+ 
+ Generates:
+-- Gene-in-lipid-raft edges (proteins detected in lipid raft fractions)
++- ProteinInLipidRaft edges (protein detected in lipid raft fractions)
+ """
+ 
+ import csv
+-import json
+ from pathlib import Path
+ from biocypher._logger import logger
+ 
+@@ -18,10 +19,6 @@ from biocypher._logger import logger
+ class RaftProtAdapter:
+     def __init__(self, data_dir="template_package/data/raftprot"):
+         self.data_dir = Path(data_dir)
+-        self.orthologs = {}
+-        self.proteins = []
+-        self._load_orthologs()
+-        self._load_data()
+ 
+     def _sanitize(self, text):
+         if text is None:
+@@ -31,104 +28,73 @@ class RaftProtAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
+-    def _load_orthologs(self):
+-        """Load mouse-to-human ortholog mapping."""
+-        orth_path = Path("template_package/mappings/mouse_to_human_orthologs.json")
+-        if orth_path.exists():
+-            try:
+-                with open(orth_path, 'r') as f:
+-                    self.orthologs = json.load(f)
+-                logger.info(f"RaftProt: Loaded {len(self.orthologs)} mouse-to-human orthologs")
+-            except Exception as e:
+-                logger.warning(f"RaftProt: Could not load orthologs: {e}")
+-
+-    def _load_data(self):
+-        """Load RaftProt data file."""
+-        data_path = self.data_dir / 'Raftprot.v2.4.txt'
+-        if not data_path.exists():
+-            logger.warning("RaftProt: Data file not found")
+-            return
+-
+-        logger.info("RaftProt: Loading raft proteomics data...")
+-        count = 0
+-
+-        try:
+-            with open(data_path, 'r', encoding='utf-8') as f:
+-                # File uses quoted, space-separated fields
+-                reader = csv.DictReader(f, delimiter=' ', quotechar='"')
+-                for row in reader:
+-                    uniprot = row.get('UniProt', row.get('OriginalID', '')).strip()
+-                    organism = row.get('Organism', '').strip()
+-                    gene_name = row.get('gene_name', '').strip()
+-                    protein_name = row.get('protein_name', '').strip()
+-                    method = row.get('BiochemMethod', '').strip()
+-                    detergent = row.get('Detergent', '').strip()
+-                    tissue_id = row.get('TissueID', '').strip()
+-
+-                    if not uniprot:
+-                        continue
+-
+-                    # Apply species filtering (Human + Mouse with ortholog mapping)
+-                    species = 'Homo sapiens' if organism == 'Human' else 'Mus musculus' if organism == 'Mouse' else organism
+-                    if species == 'Mus musculus':
+-                        mapped_id = self.orthologs.get(uniprot, uniprot)
+-                    elif species == 'Homo sapiens':
+-                        mapped_id = uniprot
+-                    else:
+-                        continue  # Skip other species
+-
+-                    self.proteins.append({
+-                        'uniprot': mapped_id,
+-                        'original_id': uniprot,
+-                        'species': species,
+-                        'gene_name': gene_name,
+-                        'protein_name': protein_name,
+-                        'method': method,
+-                        'detergent': detergent,
+-                        'tissue_id': tissue_id,
+-                    })
+-                    count += 1
+-        except Exception as e:
+-            logger.warning(f"RaftProt: Error parsing data: {e}")
+-
+-        logger.info(f"RaftProt: Loaded {count} raft protein entries")
+-
+     def get_nodes(self):
+-        """No additional nodes - uses existing Gene nodes."""
+-        logger.info("RaftProt: No additional nodes (uses Gene nodes)")
++        """No additional nodes - uses existing Gene/Protein nodes."""
++        logger.info("RaftProt: No additional nodes (uses existing protein nodes)")
+         return iter([])
+ 
+     def get_edges(self):
+         """
+-        Generate gene-in-lipid-raft edges.
++        Generate ProteinInLipidRaft edges from Raftprot.v2.4.txt.
++        File is space-delimited with quoted fields.
++        Deduplicates by (UniProt, Organism) pair.
+         Yields: (id, source, target, label, properties)
+         """
+-        logger.info(f"RaftProt: Generating edges from {len(self.proteins)} entries...")
+-        count = 0
+-        seen = set()
+-
+-        # Create a single "lipid_raft" target node concept
+-        raft_target = "GO:0045121"  # lipid raft GO term
+-
+-        for prot in self.proteins:
+-            uid = prot['uniprot']
+-            key = (uid, prot['species'])
+-            if key in seen:
+-                continue
+-            seen.add(key)
+-
+-            props = {
+-                'gene_name': self._sanitize(prot['gene_name']),
+-                'method': self._sanitize(prot['method']),
+-                'detergent': self._sanitize(prot['detergent']),
+-                'species': prot['species'],
+-                'source': 'RaftProt',
+-            }
+-
+-            if prot['species'] == 'Mus musculus' and prot['original_id'] != prot['uniprot']:
+-                props['original_id'] = prot['original_id']
++        data_path = self.data_dir / 'Raftprot.v2.4.txt'
++        if not data_path.exists():
++            logger.warning("RaftProt: Raftprot.v2.4.txt not found")
++            return
+ 
+-            yield (None, uid, raft_target, "ProteinInLipidRaft", props)
+-            count += 1
++        logger.info("RaftProt: Generating ProteinInLipidRaft edges...")
+ 
+-        logger.info(f"RaftProt: Generated {count} raft association edges")
++        raft_target = "GO:0045121"  # lipid raft GO term
++        count = 0
++        seen = set()
++        total = 0
++
++        with open(data_path, 'r', encoding='utf-8') as f:
++            reader = csv.DictReader(f, delimiter=' ', quotechar='"')
++            for row in reader:
++                total += 1
++                uniprot = row.get('UniProt', row.get('OriginalID', '')).strip()
++                organism = row.get('Organism', '').strip()
++                gene_name = row.get('gene_name', '').strip()
++                protein_name = row.get('protein_name', '').strip()
++                method = row.get('BiochemMethod', '').strip()
++                detergent = row.get('Detergent', '').strip()
++                tissue_id = row.get('TissueID', '').strip()
++
++                if not uniprot:
++                    continue
++
++                # Map organism label to species name
++                if organism == 'Human':
++                    species = 'Homo sapiens'
++                elif organism == 'Mouse':
++                    species = 'Mus musculus'
++                elif organism == 'Rat':
++                    species = 'Rattus norvegicus'
++                else:
++                    species = organism
++
++                # Deduplicate by UniProt + organism
++                key = (uniprot, organism)
++                if key in seen:
++                    continue
++                seen.add(key)
++
++                props = {
++                    'gene_name': self._sanitize(gene_name),
++                    'protein_name': self._sanitize(protein_name),
++                    'method': self._sanitize(method),
++                    'detergent': self._sanitize(detergent),
++                    'tissue_id': tissue_id,
++                    'species': species,
++                    'source': 'RaftProt',
++                }
++
++                yield (None, uniprot, raft_target, "ProteinInLipidRaft", props)
++                count += 1
++
++        logger.info(f"RaftProt: Generated {count} ProteinInLipidRaft edges "
++                     f"(from {total} total entries)")
+diff --git a/template_package/adapters/reactome_adapter.py b/template_package/adapters/reactome_adapter.py
+index 4cc2a42..656fc14 100644
+--- a/template_package/adapters/reactome_adapter.py
++++ b/template_package/adapters/reactome_adapter.py
+@@ -2,9 +2,9 @@
+ Reactome Pathway Adapter for BioCypher.
+ 
+ Loads Reactome pathway data and generates:
+-- ReactomePathway nodes
+-- GeneParticipatesInPathway edges (Gene → ReactomePathway)
+-- PathwayIsPartOfPathway edges (pathway hierarchy)
++- ReactomePathway nodes (from ReactomePathways.txt, Homo sapiens only)
++- GeneParticipatesInPathway edges (from UniProt2Reactome_All_Levels.txt, human only)
++- PathwayIsPartOfPathway edges (from ReactomePathwaysRelation.txt, human only)
+ """
+ 
+ from pathlib import Path
+@@ -13,11 +13,7 @@ from biocypher._logger import logger
+ 
+ class ReactomeAdapter:
+     def __init__(self, data_dir="template_package/data/reactome"):
+-        self.data_dir = data_dir
+-        self.pathways = {}  # R-HSA-XXXX -> {name, url}
+-        self.gene_pathway_links = []  # (uniprot_id, pathway_id, evidence)
+-        self.pathway_hierarchy = []  # (parent_id, child_id)
+-        self._load_data()
++        self.data_dir = Path(data_dir)
+ 
+     def _sanitize(self, text):
+         if text is None:
+@@ -27,167 +23,119 @@ class ReactomeAdapter:
+         text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+         return text.strip()
+ 
+-    def _load_data(self):
+-        """Load Reactome UniProt-to-pathway mapping (human only)."""
+-        filepath = Path(self.data_dir) / 'UniProt2Reactome_All_Levels.txt'
+-        if not filepath.exists():
+-            logger.warning("Reactome: UniProt2Reactome file not found")
++    def get_nodes(self):
++        """
++        Generate ReactomePathway nodes from ReactomePathways.txt.
++        Filters for Homo sapiens only (R-HSA-* identifiers).
++        Yields: (id, label, properties)
++        """
++        pathways_path = self.data_dir / 'ReactomePathways.txt'
++        if not pathways_path.exists():
++            logger.warning("Reactome: ReactomePathways.txt not found")
+             return
+ 
+-        logger.info("Reactome: Loading UniProt-to-pathway mappings (human only)...")
+-        total = 0
+-        kept = 0
++        logger.info("Reactome: Generating pathway nodes from ReactomePathways.txt...")
++        count = 0
+ 
+-        with open(filepath, 'r', encoding='utf-8') as f:
++        with open(pathways_path, 'r', encoding='utf-8') as f:
+             for line in f:
+                 parts = line.strip().split('\t')
+-                if len(parts) < 6:
++                if len(parts) < 3:
+                     continue
+ 
+-                total += 1
+-                uniprot_id = parts[0].strip()
+-                pathway_id = parts[1].strip()
+-                url = parts[2].strip()
+-                pathway_name = self._sanitize(parts[3].strip())
+-                evidence = parts[4].strip()
+-                species = parts[5].strip()
++                pathway_id = parts[0].strip()
++                pathway_name = self._sanitize(parts[1].strip())
++                species = parts[2].strip()
+ 
+-                # Filter: only human pathways (R-HSA-*)
+                 if species != 'Homo sapiens':
+                     continue
+                 if not pathway_id.startswith('R-HSA-'):
+                     continue
+ 
+-                kept += 1
+-
+-                # Register pathway
+-                if pathway_id not in self.pathways:
+-                    self.pathways[pathway_id] = {
+-                        'name': pathway_name,
+-                        'url': url,
+-                    }
+-
+-                # Register gene-pathway link
+-                self.gene_pathway_links.append({
+-                    'uniprot_id': uniprot_id,
+-                    'pathway_id': pathway_id,
+-                    'evidence': evidence,
+-                })
+-
+-        logger.info(f"Reactome: Loaded {len(self.pathways)} human pathways, "
+-                     f"{kept} gene-pathway links (from {total} total)")
+-
+-        # Load pathway hierarchy
+-        self._load_pathway_hierarchy()
+-
+-    def _load_pathway_hierarchy(self):
+-        """Load ReactomePathwaysRelation.txt for pathway parent-child relationships."""
+-        rel_path = Path(self.data_dir) / 'ReactomePathwaysRelation.txt'
+-        if not rel_path.exists():
+-            logger.info("Reactome: No pathway hierarchy file found")
+-            return
+-
+-        logger.info("Reactome: Loading pathway hierarchy...")
+-        count = 0
+-
+-        with open(rel_path, 'r', encoding='utf-8') as f:
+-            for line in f:
+-                parts = line.strip().split('\t')
+-                if len(parts) < 2:
+-                    continue
+-                parent_id = parts[0].strip()
+-                child_id = parts[1].strip()
+-
+-                # Only human pathways
+-                if parent_id.startswith('R-HSA-') and child_id.startswith('R-HSA-'):
+-                    self.pathway_hierarchy.append((parent_id, child_id))
+-                    count += 1
+-
+-                    # Ensure both pathways exist in our map
+-                    for pid in [parent_id, child_id]:
+-                        if pid not in self.pathways:
+-                            self.pathways[pid] = {
+-                                'name': '',
+-                                'url': f'https://reactome.org/content/detail/{pid}',
+-                            }
+-
+-        # Enrich pathway names from ReactomePathways.txt if available
+-        names_path = Path(self.data_dir) / 'ReactomePathways.txt'
+-        if names_path.exists():
+-            with open(names_path, 'r', encoding='utf-8') as f:
+-                for line in f:
+-                    parts = line.strip().split('\t')
+-                    if len(parts) >= 3:
+-                        pid = parts[0].strip()
+-                        pname = self._sanitize(parts[1].strip())
+-                        species = parts[2].strip()
+-                        if pid.startswith('R-HSA-') and pid in self.pathways:
+-                            if not self.pathways[pid]['name']:
+-                                self.pathways[pid]['name'] = pname
+-
+-        logger.info(f"Reactome: Loaded {count} pathway hierarchy relations")
+-
+-    def get_nodes(self):
+-        """
+-        Generate ReactomePathway nodes.
+-        Yields: (id, label, properties)
+-        """
+-        logger.info("Reactome: Generating pathway nodes...")
+-        count = 0
+-
+-        for pathway_id, data in self.pathways.items():
+-            props = {
+-                'name': data['name'],
+-                'url': data['url'],
+-                'source': 'Reactome',
+-            }
+-            yield (pathway_id, "ReactomePathway", props)
+-            count += 1
++                props = {
++                    'name': pathway_name,
++                    'url': f'https://reactome.org/PathwayBrowser/#/{pathway_id}',
++                    'source': 'Reactome',
++                }
++                yield (pathway_id, "ReactomePathway", props)
++                count += 1
+ 
+         logger.info(f"Reactome: Generated {count} ReactomePathway nodes")
+ 
+     def get_edges(self):
+         """
+-        Generate GeneParticipatesInPathway edges.
++        Generate GeneParticipatesInPathway and PathwayIsPartOfPathway edges.
++        Streams from files without loading all into memory.
+         Yields: (id, source, target, label, properties)
+         """
+-        logger.info("Reactome: Generating gene-pathway edges...")
+-        count = 0
+-        seen = set()
+-
+-        for link in self.gene_pathway_links:
+-            # Deduplicate: same gene-pathway pair may appear with different evidence
+-            key = (link['uniprot_id'], link['pathway_id'])
+-            if key in seen:
+-                continue
+-            seen.add(key)
+-
+-            props = {
+-                'evidence': link['evidence'],
+-                'source': 'Reactome',
+-            }
+-
+-            yield (
+-                None,
+-                link['uniprot_id'],
+-                link['pathway_id'],
+-                "GeneParticipatesInPathway",
+-                props
+-            )
+-            count += 1
+-
+-        logger.info(f"Reactome: Generated {count} GeneParticipatesInPathway edges")
+-
+-        # Pathway hierarchy edges
+-        hier_count = 0
+-        for parent_id, child_id in self.pathway_hierarchy:
+-            yield (
+-                None,
+-                child_id,
+-                parent_id,
+-                "PathwayIsPartOfPathway",
+-                {'source': 'Reactome'}
+-            )
+-            hier_count += 1
+-
+-        logger.info(f"Reactome: Generated {hier_count} PathwayIsPartOfPathway edges")
++        # --- GeneParticipatesInPathway edges ---
++        uniprot_path = self.data_dir / 'UniProt2Reactome_All_Levels.txt'
++        if uniprot_path.exists():
++            logger.info("Reactome: Generating GeneParticipatesInPathway edges...")
++            count = 0
++            seen = set()
++
++            with open(uniprot_path, 'r', encoding='utf-8') as f:
++                for line in f:
++                    parts = line.strip().split('\t')
++                    if len(parts) < 6:
++                        continue
++
++                    uniprot_id = parts[0].strip()
++                    pathway_id = parts[1].strip()
++                    evidence = parts[4].strip()
++                    species = parts[5].strip()
++
++                    if species != 'Homo sapiens':
++                        continue
++                    if not pathway_id.startswith('R-HSA-'):
++                        continue
++
++                    # Deduplicate by gene-pathway pair
++                    key = (uniprot_id, pathway_id)
++                    if key in seen:
++                        continue
++                    seen.add(key)
++
++                    props = {
++                        'evidence': evidence,
++                        'source': 'Reactome',
++                    }
++                    yield (None, uniprot_id, pathway_id, "GeneParticipatesInPathway", props)
++                    count += 1
++
++            logger.info(f"Reactome: Generated {count} GeneParticipatesInPathway edges")
++        else:
++            logger.warning("Reactome: UniProt2Reactome_All_Levels.txt not found")
++
++        # --- PathwayIsPartOfPathway edges ---
++        rel_path = self.data_dir / 'ReactomePathwaysRelation.txt'
++        if rel_path.exists():
++            logger.info("Reactome: Generating PathwayIsPartOfPathway edges...")
++            hier_count = 0
++
++            with open(rel_path, 'r', encoding='utf-8') as f:
++                for line in f:
++                    parts = line.strip().split('\t')
++                    if len(parts) < 2:
++                        continue
++
++                    parent_id = parts[0].strip()
++                    child_id = parts[1].strip()
++
++                    # Only human pathway relations
++                    if not parent_id.startswith('R-HSA-') or not child_id.startswith('R-HSA-'):
++                        continue
++
++                    yield (
++                        None,
++                        child_id,
++                        parent_id,
++                        "PathwayIsPartOfPathway",
++                        {'source': 'Reactome'},
++                    )
++                    hier_count += 1
++
++            logger.info(f"Reactome: Generated {hier_count} PathwayIsPartOfPathway edges")
++        else:
++            logger.warning("Reactome: ReactomePathwaysRelation.txt not found")

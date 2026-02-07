@@ -1,0 +1,556 @@
+diff --git a/adapter_counts.txt b/adapter_counts.txt
+new file mode 100644
+index 0000000..19448f7
+--- /dev/null
++++ b/adapter_counts.txt
+@@ -0,0 +1,196 @@
++====================================================================================================
++BioCypher Adapter Record Count
++Date: 2026-02-07 17:58:02
++Record limit per method: 5,000,000
++====================================================================================================
++
++#    Adapter                       Nodes        Edges        Total     Time Status
++----------------------------------------------------------------------------------------------------
++1    LIANA                             0            0            0     0.7s LOAD_ERR: 'source'
++2    ChEBI                       204,833      379,387      584,220    41.2s OK
++3    Rhea                         73,372      217,841      291,213    51.4s OK
++4    LIPIDMAPS                    50,289      161,205      211,494     1.8s OK
++5    KEGG                         32,539       25,260       57,799     0.2s OK
++6    ComplexPortal                 3,251       13,162       16,413     0.0s OK
++7    InterPro                     51,489        9,358       60,847     0.1s OK
++8    STRING                            0      457,862      457,862     5.8s OK
++9    Reactome                      2,848      143,017      145,865     0.3s OK
++10   HPA                              98      439,959      440,057     1.9s OK
++11   IntAct                            0      215,058      215,058     8.5s OK
++12   Compartments                  1,847      345,304      347,151     0.7s OK
++13   GPCRdb                          122        3,503        3,625     0.0s OK
++14   ELM                             353        2,799        3,152     0.0s OK
++15   CellOntology                  3,238        4,493        7,731     0.0s OK
++16   AllenBrain                    1,327        1,326        2,653     0.0s OK
++17   NeuroElectro                     95          766          861     0.1s OK
++18   SynGO                           279        4,267        4,546     0.0s OK
++19   ENCODE_SCREEN             1,063,878            0    1,063,878     0.8s OK
++20   BioLiP                        6,016       36,856       42,872     0.3s OK
++21   TCDB                          2,151       19,056       21,207     0.1s OK
++22   DGIdb                         2,103        3,712        5,815     0.0s OK
++23   GlyGen                          581            0          581     0.0s OK
++24   MatrisomeDB                      86          156          242     0.0s OK
++25   ExoCarta                          0        6,517        6,517     0.1s OK
++26   CPDB                              0      530,195      530,195     1.0s OK
++27   MobiDB                            0           72           72     0.1s OK
++28   iPTMnet                           0        5,129        5,129     0.0s OK
++29   Dfam                            261            0          261     0.0s OK
++30   REPAIRtoire                       0          136          136     0.0s OK
++31   ComPPI                            0      500,000      500,000     2.6s OK
++32   FANTOM5                      63,285            0       63,285     0.1s OK
++33   Membranome                       50            0           50     0.1s OK
++34   SLC                             416            0          416     0.0s OK
++35   HistoneDB                     3,713            0        3,713     0.0s OK
++36   MetalPDB                          0       40,693       40,693     0.5s OK
++37   ChEA3                             0      812,204      812,204     0.7s OK
++38   OpenProt                     81,620            0       81,620     0.2s OK
++39   PTMcode                           0      881,009      881,009     5.5s OK
++40   ModelDB                         300            0          300     0.1s OK
++41   PeptideAtlas                      0    2,531,100    2,531,100     9.4s OK
++42   SABIORK                           0          117          117     0.1s OK
++43   PDBePISA                          0          559          559     0.9s OK
++44   ENZYME                        6,951        4,461       11,412     0.1s OK
++45   PhaseP                            0          849          849     0.0s OK
++46   RNAgranuleDB                      0        4,731        4,731     0.0s OK
++47   Degronopedia                  1,707            0        1,707     0.0s OK
++48   FerrDb                            0          621          621     0.0s OK
++49   PsychENCODE                       0       70,418       70,418     0.2s OK
++50   ArrestinDB                        0          100          100     0.0s OK
++51   GtRNAdb                         631            0          631     0.0s OK
++52   AllenConnectivity                98            0           98     0.0s OK
++53   Translocatome                     0        4,533        4,533     0.0s OK
++54   3DGenome                     12,507            0       12,507     0.0s OK
++55   Adhesome                        232        6,542        6,774     0.0s OK
++56   BRENDA                        8,441        4,461       12,902     0.1s OK
++57   ChapNet                           0       56,616       56,616     0.6s OK
++58   ENCORI                            3        4,208        4,211     0.0s OK
++59   EpiMap                      985,011            0      985,011     1.2s OK
++60   EVpedia                      28,294            0       28,294     0.2s OK
++61   LION                             86    1,090,705    1,090,791     0.7s OK
++62   RaftProt                          0        1,308        1,308     0.0s OK
++63   SILVA                        19,398       19,395       38,793     0.0s OK
++64   TarBase                       2,638      812,240      814,878     3.0s OK
++65   UniCarbKB                       581            0          581     0.0s OK
++66   GENCODE                      63,086            0       63,086     3.3s OK
++67   JASPAR                        2,000            0        2,000     0.0s OK
++68   HuRI                              0       52,548       52,548     0.0s OK
++69   APPRIS                            0      112,346      112,346     0.3s OK
++70   RNAcentral                   11,352            0       11,352     0.1s OK
++71   MODOMICS                        433            0          433     0.0s OK
++72   OPM                               0        8,914        8,914     0.0s OK
++73   PolyASite                   500,000            0      500,000     1.9s OK
++74   DrLLPS                            0        3,618        3,618     0.1s OK
++75   ATtRACT                       2,855            0        2,855     0.0s OK
++76   circAtlas                   500,000            0      500,000     0.3s OK
++77   miRTarBase                        0    1,730,805    1,730,805     6.9s OK
++78   MatrixDB                          0        1,061        1,061     0.1s OK
++79   NLSdb                             0       20,532       20,532     0.0s OK
++80   NONCODE                     269,523            0      269,523     0.3s OK
++81   PsychENCODE_GRN                   0      644,292      644,292     7.4s OK
++82   MitoCarta                         0       15,933       15,933     0.2s OK
++83   UniProt                      20,431            0       20,431     0.1s OK
++84   GOA                               0      322,573      322,573     0.9s OK
++85   ClinVar                     489,441            0      489,441    13.2s OK
++86   REDIportal                  500,000            0      500,000     5.3s OK
++87   NeuroMorpho                  15,553            0       15,553     0.3s OK
++88   OmniPath                          0       85,217       85,217     0.2s OK
++89   TISSUES                           0      337,153      337,153     0.5s OK
++90   Bgee                              0      500,000      500,000     1.5s OK
++91   POSTAR                            0          463          463     0.1s OK
++92   SIGNOR                            0       27,335       27,335     0.2s OK
++93   DisGeNET                     11,181       84,038       95,219     0.3s OK
++94   CORUM                         2,916       24,432       27,348     1.2s OK
++95   CellTalkDB                        0        5,430        5,430     0.0s OK
++96   PhosphoELM                        0       26,651       26,651     0.4s OK
++97   dbPTM                             0       55,179       55,179     0.4s OK
++98   SwissPalm                         0        9,988        9,988     0.0s OK
++99   UbiNet                            0        5,035        5,035     0.0s OK
++100  HiChIPdb                          0       57,478       57,478     0.3s OK
++101  Cyclebase                         0        3,297        3,297     0.0s OK
++102  dbSNO                             0          624          624     0.0s OK
++103  iUUCD                             0        2,101        2,101     0.0s OK
++104  SEPDB                        69,205       68,959      138,164     0.2s OK
++105  Cistrome                        955          955        1,910     0.0s OK
++106  Vesiclepedia                      0            0            0     0.4s OK
++107  GO-CAM                          598            0          598     0.0s OK
++108  MouseBrain                        0            0            0     0.0s OK
++109  ABCAtlas                      3,709        2,333        6,042     0.3s OK
++110  eMouse                        8,086       22,587       30,673     0.1s OK
++111  TREPdb                        1,866            0        1,866     0.0s OK
++112  sORFs                             0            0            0     0.0s OK
++113  ProteoformAtlas              57,154       57,154      114,308     0.3s OK
++114  eRNAbase                     63,285            0       63,285     0.1s OK
++115  NUCOME                    2,490,423            0    2,490,423     3.5s OK
++116  MechanoBase                       0          520          520     0.5s OK
++117  BioDolphin                        0            0            0     0.0s OK
++118  ContactID                         0            0            0     0.0s OK
++119  MCSdb                             0            0            0     0.0s OK
++120  PoisonExons                  23,076       23,076       46,152     0.4s OK
++121  StructPPI                         0            0            0     0.0s OK
++122  BioGRID                           0    1,209,125    1,209,125     7.0s OK
++123  GWAS_Catalog                 13,094      564,965      578,059     9.2s OK
++124  PharmGKB                      3,724       20,411       24,135     0.6s OK
++125  NMDtxDB                           0            0            0     0.0s OK
++126  BrainRNASeq                       0       33,857       33,857     0.1s OK
++127  GeneNetwork                  45,101       45,101       90,202     0.2s OK
++128  LinkedBrainData               1,120            0        1,120     0.0s OK
++129  EBRAINS                           0            0            0     0.0s OK
++130  BrainKB                           0            0            0     0.0s OK
++131  MousePhenome                      0            0            0     0.0s OK
++132  HippoSeq                          0            0            0     0.0s OK
++----------------------------------------------------------------------------------------------------
++
++====================================================================================================
++SUMMARY
++====================================================================================================
++Total adapters:       132
++Working (>0 records): 119
++Empty (0 records):    12
++Failed (errors):      1
++Total nodes:          7,887,185
++Total edges:          16,059,352
++Grand total:          23,946,537
++
++TOP 20 ADAPTERS BY TOTAL RECORDS:
++Rank   Adapter                       Nodes        Edges        Total
++----------------------------------------------------------------------
++1      PeptideAtlas                      0    2,531,100    2,531,100
++2      NUCOME                    2,490,423            0    2,490,423
++3      miRTarBase                        0    1,730,805    1,730,805
++4      BioGRID                           0    1,209,125    1,209,125
++5      LION                             86    1,090,705    1,090,791
++6      ENCODE_SCREEN             1,063,878            0    1,063,878
++7      EpiMap                      985,011            0      985,011
++8      PTMcode                           0      881,009      881,009
++9      TarBase                       2,638      812,240      814,878
++10     ChEA3                             0      812,204      812,204
++11     PsychENCODE_GRN                   0      644,292      644,292
++12     ChEBI                       204,833      379,387      584,220
++13     GWAS_Catalog                 13,094      564,965      578,059
++14     CPDB                              0      530,195      530,195
++15     ComPPI                            0      500,000      500,000
++16     PolyASite                   500,000            0      500,000
++17     circAtlas                   500,000            0      500,000
++18     REDIportal                  500,000            0      500,000
++19     Bgee                              0      500,000      500,000
++20     ClinVar                     489,441            0      489,441
++
++ADAPTERS WITH ERRORS:
++----------------------------------------------------------------------
++  LIANA: LOAD_ERR: 'source'
++
++ADAPTERS WITH ZERO RECORDS (no errors):
++----------------------------------------------------------------------
++  Vesiclepedia
++  MouseBrain
++  sORFs
++  BioDolphin
++  ContactID
++  MCSdb
++  StructPPI
++  NMDtxDB
++  EBRAINS
++  BrainKB
++  MousePhenome
++  HippoSeq
++
+diff --git a/count_adapters.py b/count_adapters.py
+new file mode 100644
+index 0000000..3152c56
+--- /dev/null
++++ b/count_adapters.py
+@@ -0,0 +1,296 @@
++#!/usr/bin/env python3
++"""
++Count nodes and edges produced by each adapter in the BioCypher knowledge graph pipeline.
++Iterates get_nodes() and get_edges() for each adapter and reports counts.
++Limits to 5,000,000 records per method to avoid excessive runtime.
++"""
++
++import sys
++import os
++import time
++import traceback
++
++# Change to workspace directory
++os.chdir("/workspace")
++
++# All adapters extracted from create_knowledge_graph.py
++# Format: (name, module_path, class_name)
++ADAPTERS = [
++    ("LIANA", "template_package.adapters.liana_adapter", "LianaAdapter"),
++    ("ChEBI", "template_package.adapters.chebi_adapter", "ChEBIAdapter"),
++    ("Rhea", "template_package.adapters.rhea_adapter", "RheaAdapter"),
++    ("LIPIDMAPS", "template_package.adapters.lipidmaps_adapter", "LIPIDMAPSAdapter"),
++    ("KEGG", "template_package.adapters.kegg_adapter", "KEGGAdapter"),
++    ("ComplexPortal", "template_package.adapters.complexportal_adapter", "ComplexPortalAdapter"),
++    ("InterPro", "template_package.adapters.interpro_adapter", "InterProAdapter"),
++    ("STRING", "template_package.adapters.string_adapter", "STRINGAdapter"),
++    ("Reactome", "template_package.adapters.reactome_adapter", "ReactomeAdapter"),
++    ("HPA", "template_package.adapters.hpa_adapter", "HPAAdapter"),
++    ("IntAct", "template_package.adapters.intact_adapter", "IntActAdapter"),
++    ("Compartments", "template_package.adapters.compartments_adapter", "CompartmentsAdapter"),
++    ("GPCRdb", "template_package.adapters.gpcrdb_adapter", "GPCRdbAdapter"),
++    ("ELM", "template_package.adapters.elm_adapter", "ELMAdapter"),
++    ("CellOntology", "template_package.adapters.cell_ontology_adapter", "CellOntologyAdapter"),
++    ("AllenBrain", "template_package.adapters.allen_brain_adapter", "AllenBrainAdapter"),
++    ("NeuroElectro", "template_package.adapters.neuroelectro_adapter", "NeuroElectroAdapter"),
++    ("SynGO", "template_package.adapters.syngo_adapter", "SynGOAdapter"),
++    ("ENCODE_SCREEN", "template_package.adapters.encode_screen_adapter", "ENCODESCREENAdapter"),
++    ("BioLiP", "template_package.adapters.biolip_adapter", "BioLiPAdapter"),
++    ("TCDB", "template_package.adapters.tcdb_adapter", "TCDBAdapter"),
++    ("DGIdb", "template_package.adapters.dgidb_adapter", "DGIdbAdapter"),
++    ("GlyGen", "template_package.adapters.glygen_adapter", "GlyGenAdapter"),
++    ("MatrisomeDB", "template_package.adapters.matrisome_adapter", "MatrisomeAdapter"),
++    ("ExoCarta", "template_package.adapters.exocarta_adapter", "ExoCartaAdapter"),
++    ("CPDB", "template_package.adapters.cpdb_adapter", "CPDBAdapter"),
++    ("MobiDB", "template_package.adapters.mobidb_adapter", "MobiDBAdapter"),
++    ("iPTMnet", "template_package.adapters.iptmnet_adapter", "iPTMnetAdapter"),
++    ("Dfam", "template_package.adapters.dfam_adapter", "DfamAdapter"),
++    ("REPAIRtoire", "template_package.adapters.repairtoire_adapter", "RepairToireAdapter"),
++    ("ComPPI", "template_package.adapters.comppi_adapter", "ComPPIAdapter"),
++    ("FANTOM5", "template_package.adapters.fantom5_adapter", "FANTOM5Adapter"),
++    ("Membranome", "template_package.adapters.membranome_adapter", "MembranomeAdapter"),
++    ("SLC", "template_package.adapters.slc_adapter", "SLCAdapter"),
++    ("HistoneDB", "template_package.adapters.histonedb_adapter", "HistoneDBAdapter"),
++    ("MetalPDB", "template_package.adapters.metalpdb_adapter", "MetalPDBAdapter"),
++    ("ChEA3", "template_package.adapters.chea3_adapter", "ChEA3Adapter"),
++    ("OpenProt", "template_package.adapters.openprot_adapter", "OpenProtAdapter"),
++    ("PTMcode", "template_package.adapters.ptmcode_adapter", "PTMcodeAdapter"),
++    ("ModelDB", "template_package.adapters.modeldb_adapter", "ModelDBAdapter"),
++    ("PeptideAtlas", "template_package.adapters.peptideatlas_adapter", "PeptideAtlasAdapter"),
++    ("SABIORK", "template_package.adapters.sabiork_adapter", "SABIORKAdapter"),
++    ("PDBePISA", "template_package.adapters.pdbe_pisa_adapter", "PDBePISAAdapter"),
++    ("ENZYME", "template_package.adapters.enzyme_adapter", "EnzymeAdapter"),
++    ("PhaseP", "template_package.adapters.phasep_adapter", "PhasePAdapter"),
++    ("RNAgranuleDB", "template_package.adapters.rnagranuledb_adapter", "RNAgranuleDBAdapter"),
++    ("Degronopedia", "template_package.adapters.degronopedia_adapter", "DegronopediaAdapter"),
++    ("FerrDb", "template_package.adapters.ferrdb_adapter", "FerrDbAdapter"),
++    ("PsychENCODE", "template_package.adapters.psychencode_adapter", "PsychENCODEAdapter"),
++    ("ArrestinDB", "template_package.adapters.arrestindb_adapter", "ArrestinDBAdapter"),
++    ("GtRNAdb", "template_package.adapters.gtrnadb_adapter", "GtRNAdbAdapter"),
++    ("AllenConnectivity", "template_package.adapters.allen_connectivity_adapter", "AllenConnectivityAdapter"),
++    ("Translocatome", "template_package.adapters.translocatome_adapter", "TranslocatomeAdapter"),
++    ("3DGenome", "template_package.adapters.threed_genome_adapter", "ThreeDGenomeAdapter"),
++    ("Adhesome", "template_package.adapters.adhesome_adapter", "AdhesomeAdapter"),
++    ("BRENDA", "template_package.adapters.brenda_adapter", "BRENDAAdapter"),
++    ("ChapNet", "template_package.adapters.chapnet_adapter", "ChapNetAdapter"),
++    ("ENCORI", "template_package.adapters.encori_adapter", "ENCORIAdapter"),
++    ("EpiMap", "template_package.adapters.epimap_adapter", "EpiMapAdapter"),
++    ("EVpedia", "template_package.adapters.evpedia_adapter", "EVpediaAdapter"),
++    ("LION", "template_package.adapters.lipid_ontology_adapter", "LipidOntologyAdapter"),
++    ("RaftProt", "template_package.adapters.raftprot_adapter", "RaftProtAdapter"),
++    ("SILVA", "template_package.adapters.silva_adapter", "SILVAAdapter"),
++    ("TarBase", "template_package.adapters.tarbase_adapter", "TarBaseAdapter"),
++    ("UniCarbKB", "template_package.adapters.unicarbkb_adapter", "UniCarbKBAdapter"),
++    ("GENCODE", "template_package.adapters.gencode_adapter", "GENCODEAdapter"),
++    ("JASPAR", "template_package.adapters.jaspar_adapter", "JASPARAdapter"),
++    ("HuRI", "template_package.adapters.huri_adapter", "HuRIAdapter"),
++    ("APPRIS", "template_package.adapters.appris_adapter", "APPRISAdapter"),
++    ("RNAcentral", "template_package.adapters.rnacentral_adapter", "RNAcentralAdapter"),
++    ("MODOMICS", "template_package.adapters.modomics_adapter", "MODOMICSAdapter"),
++    ("OPM", "template_package.adapters.opm_adapter", "OPMAdapter"),
++    ("PolyASite", "template_package.adapters.polyasite_adapter", "PolyASiteAdapter"),
++    ("DrLLPS", "template_package.adapters.drllps_adapter", "DrLLPSAdapter"),
++    ("ATtRACT", "template_package.adapters.attract_adapter", "ATtRACTAdapter"),
++    ("circAtlas", "template_package.adapters.circatlas_adapter", "CircAtlasAdapter"),
++    ("miRTarBase", "template_package.adapters.mirtarbase_adapter", "MiRTarBaseAdapter"),
++    ("MatrixDB", "template_package.adapters.matrixdb_adapter", "MatrixDBAdapter"),
++    ("NLSdb", "template_package.adapters.nlsdb_adapter", "NLSdbAdapter"),
++    ("NONCODE", "template_package.adapters.noncode_adapter", "NONCODEAdapter"),
++    ("PsychENCODE_GRN", "template_package.adapters.psychencode_grn_adapter", "PsychENCODEGRNAdapter"),
++    ("MitoCarta", "template_package.adapters.mitocarta_adapter", "MitoCartaAdapter"),
++    ("UniProt", "template_package.adapters.uniprot_adapter", "UniProtAdapter"),
++    ("GOA", "template_package.adapters.goa_adapter", "GOAAdapter"),
++    ("ClinVar", "template_package.adapters.clinvar_adapter", "ClinVarAdapter"),
++    ("REDIportal", "template_package.adapters.rediportal_adapter", "REDIportalAdapter"),
++    ("NeuroMorpho", "template_package.adapters.neuromorpho_adapter", "NeuroMorphoAdapter"),
++    ("OmniPath", "template_package.adapters.omnipath_adapter", "OmniPathAdapter"),
++    ("TISSUES", "template_package.adapters.tissues_adapter", "TISSUESAdapter"),
++    ("Bgee", "template_package.adapters.bgee_adapter", "BgeeAdapter"),
++    ("POSTAR", "template_package.adapters.postar_adapter", "POSTARAdapter"),
++    ("SIGNOR", "template_package.adapters.signor_adapter", "SIGNORAdapter"),
++    ("DisGeNET", "template_package.adapters.disgenet_adapter", "DisGeNETAdapter"),
++    ("CORUM", "template_package.adapters.corum_adapter", "CORUMAdapter"),
++    ("CellTalkDB", "template_package.adapters.celltalkdb_adapter", "CellTalkDBAdapter"),
++    ("PhosphoELM", "template_package.adapters.phosphoelm_adapter", "PhosphoELMAdapter"),
++    ("dbPTM", "template_package.adapters.dbptm_adapter", "DbPTMAdapter"),
++    ("SwissPalm", "template_package.adapters.swisspalm_adapter", "SwissPalmAdapter"),
++    ("UbiNet", "template_package.adapters.ubinet_adapter", "UbiNetAdapter"),
++    ("HiChIPdb", "template_package.adapters.hichipdb_adapter", "HiChIPdbAdapter"),
++    ("Cyclebase", "template_package.adapters.cyclebase_adapter", "CyclebaseAdapter"),
++    ("dbSNO", "template_package.adapters.dbsno_adapter", "DbSNOAdapter"),
++    ("iUUCD", "template_package.adapters.iuucd_adapter", "IUUCDAdapter"),
++    ("SEPDB", "template_package.adapters.sepdb_adapter", "SEPDBAdapter"),
++    ("Cistrome", "template_package.adapters.cistrome_adapter", "CistromeAdapter"),
++    ("Vesiclepedia", "template_package.adapters.vesiclepedia_adapter", "VesiclepediaAdapter"),
++    ("GO-CAM", "template_package.adapters.gocam_adapter", "GOCAMAdapter"),
++    ("MouseBrain", "template_package.adapters.mousebrain_adapter", "MouseBrainAdapter"),
++    ("ABCAtlas", "template_package.adapters.abc_atlas_adapter", "ABCAtlasAdapter"),
++    ("eMouse", "template_package.adapters.emouse_adapter", "EMouseAdapter"),
++    ("TREPdb", "template_package.adapters.trepdb_adapter", "TREPdbAdapter"),
++    ("sORFs", "template_package.adapters.sorfs_adapter", "SORFsAdapter"),
++    ("ProteoformAtlas", "template_package.adapters.proteoform_atlas_adapter", "ProteoformAtlasAdapter"),
++    ("eRNAbase", "template_package.adapters.ernabase_adapter", "ERNAbaseAdapter"),
++    ("NUCOME", "template_package.adapters.nucome_adapter", "NUCOMEAdapter"),
++    ("MechanoBase", "template_package.adapters.mechanobase_adapter", "MechanoBaseAdapter"),
++    ("BioDolphin", "template_package.adapters.biodolphin_adapter", "BioDolphinAdapter"),
++    ("ContactID", "template_package.adapters.contactid_adapter", "ContactIDAdapter"),
++    ("MCSdb", "template_package.adapters.mcsdb_adapter", "MCSdbAdapter"),
++    ("PoisonExons", "template_package.adapters.poison_exons_adapter", "PoisonExonsAdapter"),
++    ("StructPPI", "template_package.adapters.structppi_adapter", "StructPPIAdapter"),
++    ("BioGRID", "template_package.adapters.biogrid_adapter", "BioGRIDAdapter"),
++    ("GWAS_Catalog", "template_package.adapters.gwas_catalog_adapter", "GWASCatalogAdapter"),
++    ("PharmGKB", "template_package.adapters.pharmgkb_adapter", "PharmGKBAdapter"),
++    ("NMDtxDB", "template_package.adapters.nmdtxdb_adapter", "NMDtxDBAdapter"),
++    ("BrainRNASeq", "template_package.adapters.brain_rnaseq_adapter", "BrainRNASeqAdapter"),
++    ("GeneNetwork", "template_package.adapters.genenetwork_adapter", "GeneNetworkAdapter"),
++    ("LinkedBrainData", "template_package.adapters.linked_brain_data_adapter", "LinkedBrainDataAdapter"),
++    ("EBRAINS", "template_package.adapters.ebrains_adapter", "EBRAINSAdapter"),
++    ("BrainKB", "template_package.adapters.brainkb_adapter", "BrainKBAdapter"),
++    ("MousePhenome", "template_package.adapters.mouse_phenome_adapter", "MousePhenomeAdapter"),
++    ("HippoSeq", "template_package.adapters.hipposeq_adapter", "HippoSeqAdapter"),
++]
++
++RECORD_LIMIT = 5_000_000  # Max records to count per method before stopping
++
++def count_iterator(gen, limit=RECORD_LIMIT):
++    """Count items from a generator, up to limit."""
++    count = 0
++    truncated = False
++    for _ in gen:
++        count += 1
++        if count >= limit:
++            truncated = True
++            break
++    return count, truncated
++
++
++def main():
++    import importlib
++
++    results = []
++    total_nodes = 0
++    total_edges = 0
++    errors = 0
++
++    header = f"{'#':<4} {'Adapter':<22} {'Nodes':>12} {'Edges':>12} {'Total':>12} {'Time':>8} {'Status'}"
++    sep = "-" * 100
++
++    print("=" * 100)
++    print("BioCypher Adapter Record Count")
++    print(f"Date: {time.strftime('%Y-%m-%d %H:%M:%S')}")
++    print(f"Record limit per method: {RECORD_LIMIT:,}")
++    print("=" * 100)
++    print()
++    print(header)
++    print(sep)
++
++    for idx, (name, module_path, class_name) in enumerate(ADAPTERS, 1):
++        t0 = time.time()
++        node_count = 0
++        edge_count = 0
++        status = "OK"
++        node_trunc = False
++        edge_trunc = False
++
++        try:
++            # Import the module
++            mod = importlib.import_module(module_path)
++            cls = getattr(mod, class_name)
++            adapter = cls()
++
++            # Count nodes
++            try:
++                node_gen = adapter.get_nodes()
++                node_count, node_trunc = count_iterator(node_gen)
++            except Exception as e:
++                status = f"node_err: {str(e)[:60]}"
++
++            # Count edges
++            try:
++                edge_gen = adapter.get_edges()
++                edge_count, edge_trunc = count_iterator(edge_gen)
++            except Exception as e:
++                if status == "OK":
++                    status = f"edge_err: {str(e)[:60]}"
++                else:
++                    status += f" | edge_err: {str(e)[:60]}"
++
++            if node_trunc or edge_trunc:
++                parts = []
++                if node_trunc:
++                    parts.append("nodes_truncated")
++                if edge_trunc:
++                    parts.append("edges_truncated")
++                if status == "OK":
++                    status = ", ".join(parts)
++                else:
++                    status += " | " + ", ".join(parts)
++
++        except Exception as e:
++            status = f"LOAD_ERR: {str(e)[:80]}"
++            errors += 1
++
++        elapsed = time.time() - t0
++        total_nodes += node_count
++        total_edges += edge_count
++
++        node_str = f"{node_count:,}" if node_count > 0 else "0"
++        edge_str = f"{edge_count:,}" if edge_count > 0 else "0"
++        total_str = f"{node_count + edge_count:,}"
++
++        line = f"{idx:<4} {name:<22} {node_str:>12} {edge_str:>12} {total_str:>12} {elapsed:>7.1f}s {status}"
++        print(line, flush=True)
++        results.append((name, node_count, edge_count, elapsed, status))
++
++    print(sep)
++    print()
++
++    # Summary
++    grand_total = total_nodes + total_edges
++    working = sum(1 for _, n, e, _, s in results if (n + e) > 0)
++    failed = sum(1 for _, n, e, _, s in results if "ERR" in s.upper())
++    empty = sum(1 for _, n, e, _, s in results if (n + e) == 0 and "ERR" not in s.upper())
++
++    print("=" * 100)
++    print("SUMMARY")
++    print("=" * 100)
++    print(f"Total adapters:       {len(ADAPTERS)}")
++    print(f"Working (>0 records): {working}")
++    print(f"Empty (0 records):    {empty}")
++    print(f"Failed (errors):      {failed}")
++    print(f"Total nodes:          {total_nodes:,}")
++    print(f"Total edges:          {total_edges:,}")
++    print(f"Grand total:          {grand_total:,}")
++    print()
++
++    # Top 20 by total records
++    sorted_results = sorted(results, key=lambda x: x[1] + x[2], reverse=True)
++    print("TOP 20 ADAPTERS BY TOTAL RECORDS:")
++    print(f"{'Rank':<6} {'Adapter':<22} {'Nodes':>12} {'Edges':>12} {'Total':>12}")
++    print("-" * 70)
++    for rank, (name, nc, ec, _, _) in enumerate(sorted_results[:20], 1):
++        print(f"{rank:<6} {name:<22} {nc:>12,} {ec:>12,} {nc+ec:>12,}")
++
++    print()
++
++    # List adapters with errors
++    err_adapters = [(name, status) for name, _, _, _, status in results if "ERR" in status.upper() or "err" in status]
++    if err_adapters:
++        print("ADAPTERS WITH ERRORS:")
++        print("-" * 70)
++        for name, status in err_adapters:
++            print(f"  {name}: {status}")
++        print()
++
++    # List empty adapters
++    empty_adapters = [name for name, n, e, _, s in results if (n + e) == 0 and "ERR" not in s.upper() and "err" not in s]
++    if empty_adapters:
++        print("ADAPTERS WITH ZERO RECORDS (no errors):")
++        print("-" * 70)
++        for name in empty_adapters:
++            print(f"  {name}")
++        print()
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/template_package/adapters/vesiclepedia_adapter.py b/template_package/adapters/vesiclepedia_adapter.py
+index 7581e1b..ec41d99 100644
+--- a/template_package/adapters/vesiclepedia_adapter.py
++++ b/template_package/adapters/vesiclepedia_adapter.py
+@@ -42,6 +42,17 @@ class VesiclepediaAdapter:
+                 logger.warning(f"Vesiclepedia: Error reading {fpath}: {e}")
+         logger.info(f"Vesiclepedia: Loaded {len(self.entries)} entries")
+ 
++    def _get_col(self, row, *candidates):
++        """Case-insensitive column lookup."""
++        for c in candidates:
++            if c in row:
++                return row[c]
++        cl = {k.lower(): v for k, v in row.items()}
++        for c in candidates:
++            if c.lower() in cl:
++                return cl[c.lower()]
++        return ''
++
+     def _parse_file(self, fh):
+         header = None
+         for line in fh:
+@@ -55,21 +66,23 @@ class VesiclepediaAdapter:
+             if len(parts) < 3:
+                 continue
+             row = dict(zip(header, parts))
+-            gene = row.get('Gene Symbol', row.get('gene_symbol',
+-                   row.get('Gene', row.get('Protein Name', ''))))
+-            species = row.get('Species', row.get('Organism', ''))
++            gene = self._get_col(row, 'GENE SYMBOL', 'Gene Symbol',
++                                 'gene_symbol', 'Gene', 'Protein Name')
++            species = self._get_col(row, 'SPECIES', 'Species', 'Organism')
+             if species and 'Homo sapiens' not in species and 'Human' not in species:
+                 if 'sapiens' not in species.lower() and '9606' not in str(species):
+                     continue
+             if not gene:
+                 continue
+-            content_type = row.get('Content Type', row.get('content_type', 'protein'))
++            content_type = self._get_col(row, 'CONTENT TYPE', 'Content Type',
++                                         'content_type') or 'protein'
++            methods = self._get_col(row, 'METHODS', 'Vesicle Type', 'vesicle_type')
+             self.entries.append({
+                 'gene': gene.strip(),
+                 'species': species,
+                 'content_type': content_type,
+-                'vesicle_type': row.get('Vesicle Type', row.get('vesicle_type', '')),
+-                'tissue': row.get('Tissue', row.get('Sample', '')),
++                'vesicle_type': methods,
++                'tissue': self._get_col(row, 'Tissue', 'Sample'),
+             })
+ 
+     def get_nodes(self):

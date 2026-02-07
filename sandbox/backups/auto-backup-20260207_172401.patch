@@ -1,0 +1,365 @@
+diff --git a/template_package/adapters/abc_atlas_adapter.py b/template_package/adapters/abc_atlas_adapter.py
+new file mode 100644
+index 0000000..7386575
+--- /dev/null
++++ b/template_package/adapters/abc_atlas_adapter.py
+@@ -0,0 +1,79 @@
++"""
++Allen Brain Cell (ABC) Atlas Adapter for BioCypher.
++
++Loads brain cell type taxonomy from Allen Brain Cell Atlas.
++"""
++
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class ABCAtlasAdapter:
++    def __init__(self, data_dir="template_package/data/abc_atlas"):
++        self.data_dir = Path(data_dir)
++        self.cell_types = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        if not self.data_dir.exists():
++            logger.warning("ABC Atlas: data directory not found")
++            return
++        for fpath in list(self.data_dir.glob("*.json")) + list(self.data_dir.glob("*.csv")) + list(self.data_dir.glob("*.tsv")):
++            try:
++                if fpath.suffix == '.json':
++                    with open(fpath, 'r') as f:
++                        data = json.load(f)
++                    if isinstance(data, list):
++                        self.cell_types.extend(data)
++                    elif isinstance(data, dict) and 'msg' in data:
++                        self.cell_types.extend(data.get('msg', []))
++                else:
++                    with open(fpath, 'r', errors='replace') as f:
++                        first = f.readline()
++                        if first.startswith('<'):
++                            continue
++                        f.seek(0)
++                        header = None
++                        for line in f:
++                            parts = line.strip().split('\t' if fpath.suffix == '.tsv' else ',')
++                            if header is None:
++                                header = parts
++                                continue
++                            if len(parts) >= 2:
++                                self.cell_types.append(dict(zip(header, parts)))
++            except Exception as e:
++                logger.warning(f"ABC Atlas: Error reading {fpath}: {e}")
++        logger.info(f"ABC Atlas: Loaded {len(self.cell_types)} cell types")
++
++    def get_nodes(self):
++        logger.info("ABC Atlas: Generating CellType nodes...")
++        count = 0
++        for ct in self.cell_types:
++            ct_id = ct.get('cell_type_accession_id', ct.get('id', ct.get('cell_set_accession', '')))
++            if not ct_id:
++                continue
++            name = ct.get('cell_type_name', ct.get('label', ct.get('cell_set_label', '')))
++            props = {
++                'name': self._sanitize(name),
++                'definition': self._sanitize(ct.get('cell_type_description', ct.get('cell_set_description', ''))),
++                'synonyms': '',
++                'xrefs': '',
++                'source': 'ABC Atlas',
++            }
++            yield (f"abc:{ct_id}", "CellType", props)
++            count += 1
++        logger.info(f"ABC Atlas: Generated {count} CellType nodes")
++
++    def get_edges(self):
++        logger.info("ABC Atlas: No edges")
++        return
++        yield
+diff --git a/template_package/adapters/gocam_adapter.py b/template_package/adapters/gocam_adapter.py
+new file mode 100644
+index 0000000..f888370
+--- /dev/null
++++ b/template_package/adapters/gocam_adapter.py
+@@ -0,0 +1,69 @@
++"""
++GO-CAM (Gene Ontology Causal Activity Models) Adapter for BioCypher.
++
++Loads structured causal models from GO-CAM.
++"""
++
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class GOCAMAdapter:
++    def __init__(self, data_dir="template_package/data/gocam"):
++        self.data_dir = Path(data_dir)
++        self.models = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        if not self.data_dir.exists():
++            logger.warning("GO-CAM: data directory not found")
++            return
++        for fpath in self.data_dir.glob("*.json"):
++            try:
++                with open(fpath, 'r') as f:
++                    first = f.readline()
++                    if first.startswith('<'):
++                        continue
++                    f.seek(0)
++                    data = json.load(f)
++                if isinstance(data, list):
++                    self.models.extend(data)
++                elif isinstance(data, dict):
++                    if 'models' in data:
++                        self.models.extend(data['models'])
++                    else:
++                        self.models.append(data)
++            except Exception as e:
++                logger.warning(f"GO-CAM: Error reading {fpath}: {e}")
++        logger.info(f"GO-CAM: Loaded {len(self.models)} models")
++
++    def get_nodes(self):
++        logger.info("GO-CAM: Generating CausalActivityModel nodes...")
++        count = 0
++        for model in self.models:
++            model_id = model.get('id', model.get('gocam', ''))
++            if not model_id:
++                continue
++            title = model.get('title', model.get('label', ''))
++            props = {
++                'name': self._sanitize(title),
++                'state': self._sanitize(model.get('state', '')),
++                'source': 'GO-CAM',
++            }
++            yield (model_id, "CausalActivityModel", props)
++            count += 1
++        logger.info(f"GO-CAM: Generated {count} CausalActivityModel nodes")
++
++    def get_edges(self):
++        logger.info("GO-CAM: No edges (models are standalone)")
++        return
++        yield
+diff --git a/template_package/adapters/mousebrain_adapter.py b/template_package/adapters/mousebrain_adapter.py
+new file mode 100644
+index 0000000..77d9f52
+--- /dev/null
++++ b/template_package/adapters/mousebrain_adapter.py
+@@ -0,0 +1,94 @@
++"""
++MouseBrain.org (Linnarsson Lab Single-Cell Atlas) Adapter for BioCypher.
++
++Loads mouse brain cell type taxonomy data.
++"""
++
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class MouseBrainAdapter:
++    def __init__(self, data_dir="template_package/data/mousebrain"):
++        self.data_dir = Path(data_dir)
++        self.cell_types = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        if not self.data_dir.exists():
++            logger.warning("MouseBrain: data directory not found")
++            return
++        # Try JSON files
++        for fpath in self.data_dir.glob("*.json"):
++            try:
++                with open(fpath, 'r') as f:
++                    data = json.load(f)
++                if isinstance(data, list):
++                    self.cell_types.extend(data)
++                elif isinstance(data, dict):
++                    for k, v in data.items():
++                        if isinstance(v, dict):
++                            v['id'] = k
++                            self.cell_types.append(v)
++            except Exception as e:
++                logger.warning(f"MouseBrain: Error reading {fpath}: {e}")
++        # Try TSV files
++        for fpath in list(self.data_dir.glob("*.tsv")) + list(self.data_dir.glob("*.csv")):
++            try:
++                with open(fpath, 'r', errors='replace') as f:
++                    first = f.readline()
++                    if first.startswith('<'):
++                        continue
++                    f.seek(0)
++                    self._parse_tsv(f)
++            except Exception as e:
++                logger.warning(f"MouseBrain: Error reading {fpath}: {e}")
++        logger.info(f"MouseBrain: Loaded {len(self.cell_types)} cell types")
++
++    def _parse_tsv(self, fh):
++        header = None
++        for line in fh:
++            line = line.strip()
++            if not line:
++                continue
++            parts = line.split('\t')
++            if header is None:
++                header = parts
++                continue
++            if len(parts) < 2:
++                continue
++            row = dict(zip(header, parts))
++            self.cell_types.append(row)
++
++    def get_nodes(self):
++        logger.info("MouseBrain: Generating CellType nodes...")
++        count = 0
++        for ct in self.cell_types:
++            ct_id = ct.get('id', ct.get('ClusterName', ct.get('cluster_id', '')))
++            if not ct_id:
++                continue
++            name = ct.get('name', ct.get('Description', ct.get('cell_type', '')))
++            props = {
++                'name': self._sanitize(name),
++                'definition': self._sanitize(ct.get('description', ct.get('region', ''))),
++                'synonyms': '',
++                'xrefs': '',
++                'source': 'MouseBrain.org',
++            }
++            yield (f"mousebrain:{ct_id}", "CellType", props)
++            count += 1
++        logger.info(f"MouseBrain: Generated {count} CellType nodes")
++
++    def get_edges(self):
++        logger.info("MouseBrain: No edges")
++        return
++        yield
+diff --git a/template_package/adapters/vesiclepedia_adapter.py b/template_package/adapters/vesiclepedia_adapter.py
+new file mode 100644
+index 0000000..7581e1b
+--- /dev/null
++++ b/template_package/adapters/vesiclepedia_adapter.py
+@@ -0,0 +1,99 @@
++"""
++Vesiclepedia (Extracellular Vesicle Database) Adapter for BioCypher.
++
++Loads protein and RNA content of extracellular vesicles.
++- GeneInExosome edges (reuses ExoCarta schema)
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class VesiclepediaAdapter:
++    def __init__(self, data_dir="template_package/data/vesiclepedia"):
++        self.data_dir = Path(data_dir)
++        self.entries = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        if not self.data_dir.exists():
++            logger.warning("Vesiclepedia: data directory not found")
++            return
++        candidates = (list(self.data_dir.glob("*.tsv"))
++                      + list(self.data_dir.glob("*.txt"))
++                      + list(self.data_dir.glob("*.csv")))
++        for fpath in candidates:
++            try:
++                with open(fpath, 'r', errors='replace') as f:
++                    first = f.readline()
++                    if first.startswith('<'):
++                        continue
++                    f.seek(0)
++                    self._parse_file(f)
++            except Exception as e:
++                logger.warning(f"Vesiclepedia: Error reading {fpath}: {e}")
++        logger.info(f"Vesiclepedia: Loaded {len(self.entries)} entries")
++
++    def _parse_file(self, fh):
++        header = None
++        for line in fh:
++            line = line.strip()
++            if not line:
++                continue
++            parts = line.split('\t')
++            if header is None:
++                header = [h.strip() for h in parts]
++                continue
++            if len(parts) < 3:
++                continue
++            row = dict(zip(header, parts))
++            gene = row.get('Gene Symbol', row.get('gene_symbol',
++                   row.get('Gene', row.get('Protein Name', ''))))
++            species = row.get('Species', row.get('Organism', ''))
++            if species and 'Homo sapiens' not in species and 'Human' not in species:
++                if 'sapiens' not in species.lower() and '9606' not in str(species):
++                    continue
++            if not gene:
++                continue
++            content_type = row.get('Content Type', row.get('content_type', 'protein'))
++            self.entries.append({
++                'gene': gene.strip(),
++                'species': species,
++                'content_type': content_type,
++                'vesicle_type': row.get('Vesicle Type', row.get('vesicle_type', '')),
++                'tissue': row.get('Tissue', row.get('Sample', '')),
++            })
++
++    def get_nodes(self):
++        logger.info("Vesiclepedia: No dedicated nodes")
++        return
++        yield
++
++    def get_edges(self):
++        logger.info("Vesiclepedia: Generating GeneInExosome edges...")
++        count = 0
++        seen = set()
++        for entry in self.entries:
++            key = (entry['gene'], entry.get('content_type', ''))
++            if key in seen:
++                continue
++            seen.add(key)
++            props = {
++                'species': 'Homo sapiens',
++                'content_types': self._sanitize(entry.get('content_type', '')),
++                'detection_methods': self._sanitize(entry.get('vesicle_type', '')),
++                'num_experiments': 1,
++                'source': 'Vesiclepedia',
++            }
++            yield (None, entry['gene'], f"vesiclepedia:{entry['gene']}",
++                   "GeneInExosome", props)
++            count += 1
++        logger.info(f"Vesiclepedia: Generated {count} GeneInExosome edges")
