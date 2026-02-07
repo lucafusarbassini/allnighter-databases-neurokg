@@ -52,6 +52,11 @@ while true; do
     # Extract sandbox log
     docker exec allnighter-sandbox cat /agent-logs/sandbox.log > "$LOG_FILE" 2>/dev/null || true
 
+    # Sync data files to host (databases)
+    echo "  Syncing data files..."
+    mkdir -p ../template_package/data
+    docker cp allnighter-sandbox:/workspace/template_package/data/. ../template_package/data/ 2>/dev/null || true
+
     if [ -s "$PATCH_FILE" ]; then
         LINES=$(wc -l < "$PATCH_FILE")
         echo "  Backup saved: $PATCH_FILE (${LINES} lines)"

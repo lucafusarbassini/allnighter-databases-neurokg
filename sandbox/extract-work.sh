@@ -52,6 +52,13 @@ LINES=$(wc -l < "$PATCH_FILE")
 echo "Patch generated: ${PATCH_FILE} (${LINES} lines)"
 echo ""
 
+# Sync data files from container to host (databases, downloads, etc.)
+echo "Syncing data files from sandbox..."
+mkdir -p "${PROJECT_DIR}/template_package/data"
+docker cp allnighter-sandbox:/workspace/template_package/data/. "${PROJECT_DIR}/template_package/data/" 2>/dev/null || echo "  No data directory to sync"
+echo "Data sync complete."
+echo ""
+
 # Show summary of changed files
 echo "Files changed:"
 docker exec allnighter-sandbox su-exec agent bash -c '
