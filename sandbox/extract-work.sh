@@ -34,29 +34,13 @@ mkdir -p "$PATCH_DIR"
 
 echo "=== Extracting work from sandbox ==="
 
-# Find the baseline commit (first commit in sandbox repo)
-BASELINE=$(docker exec allnighter-sandbox su-exec agent git -C /workspace rev-list --max-parents=0 HEAD 2>/dev/null | head -1)
-
-if [ -z "$BASELINE" ]; then
-    echo "ERROR: Could not find baseline commit in sandbox."
-    exit 1
-fi
-
-echo "Baseline commit: ${BASELINE}"
-
-# Stage any uncommitted work first
+# Generate a diff of all changes since the baseline snapshot
+echo "Generating patch..."
 docker exec allnighter-sandbox su-exec agent bash -c '
     cd /workspace
     git add -A 2>/dev/null
-    git diff --cached --quiet 2>/dev/null || git commit -m "Extract: save uncommitted work" 2>/dev/null
-' || true
-
-# Generate diff of ALL changes since baseline (committed + uncommitted)
-echo "Generating patch (all changes since baseline)..."
-docker exec allnighter-sandbox su-exec agent bash -c "
-    cd /workspace
-    git diff ${BASELINE} HEAD
-" > "$PATCH_FILE"
+    git diff --cached
+' > "$PATCH_FILE"
 
 if [ ! -s "$PATCH_FILE" ]; then
     echo "No changes detected in the sandbox workspace."
@@ -77,10 +61,10 @@ echo ""
 
 # Show summary of changed files
 echo "Files changed:"
-docker exec allnighter-sandbox su-exec agent bash -c "
+docker exec allnighter-sandbox su-exec agent bash -c '
     cd /workspace
-    git diff --stat ${BASELINE} HEAD
-"
+    git diff --cached --stat
+'
 echo ""
 
 # Also extract the sandbox log

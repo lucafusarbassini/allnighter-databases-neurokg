@@ -1,4 +1,9 @@
-# add your desired knowledge graph components here
+# BioCypher Knowledge Graph Schema Configuration
+# Uses BioLink ontology names in sentence case
+
+# ============================================================
+# EXISTING: LIANA (Ligand-Receptor Interactions)
+# ============================================================
 
 gene:
   represented_as: node
@@ -16,3 +21,1688 @@ ligand receptor interaction:
   input_label: LigandReceptorInteraction
   properties:
     species: str[]
+
+# ============================================================
+# ChEBI (Chemical Entities of Biological Interest)
+# ============================================================
+
+chemical substance:
+  is_a: chemical entity
+  represented_as: node
+  preferred_id: chebi
+  input_label: ChemicalSubstance
+  properties:
+    name: str
+    definition: str
+    formula: str
+    charge: int
+    mass: float
+    stars: int
+    synonyms: str[]
+    xrefs: str
+
+subclass of:
+  is_a: related to
+  represented_as: edge
+  input_label: SubclassOf
+
+chemical relation:
+  is_a: related to
+  represented_as: edge
+  input_label: ChemicalRelation
+  properties:
+    relation_type: str
+
+# ============================================================
+# Rhea (Biochemical Reactions)
+# ============================================================
+
+biochemical reaction:
+  is_a: biological process or activity
+  represented_as: node
+  preferred_id: rhea
+  input_label: BiochemicalReaction
+  properties:
+    rhea_id: str
+    direction: str
+    master_id: str
+    ec_number: str[]
+    smiles: str
+    equation: str
+    xrefs: str
+
+reaction variant:
+  is_a: related to
+  represented_as: edge
+  input_label: ReactionVariant
+  properties:
+    variant_type: str
+
+has substrate:
+  is_a: related to
+  represented_as: edge
+  input_label: HasSubstrate
+
+has product:
+  is_a: related to
+  represented_as: edge
+  input_label: HasProduct
+
+# ============================================================
+# LIPID MAPS Structure Database
+# ============================================================
+
+lipid:
+  is_a: chemical substance
+  represented_as: node
+  preferred_id: lipidmaps
+  input_label: Lipid
+  properties:
+    name: str
+    systematic_name: str
+    abbreviation: str
+    formula: str
+    mass: float
+    inchi: str
+    inchi_key: str
+    smiles: str
+    category: str
+    main_class: str
+    sub_class: str
+    class_level4: str
+    synonyms: str[]
+    xrefs: str
+    source: str
+
+lipid category:
+  is_a: ontology class
+  represented_as: node
+  preferred_id: lipidmaps_cat
+  input_label: LipidCategory
+  properties:
+    code: str
+    name: str
+    level: str
+
+lipid classified as:
+  is_a: related to
+  represented_as: edge
+  input_label: LipidClassifiedAs
+  properties:
+    classification_level: str
+    classification_type: str
+
+equivalent to:
+  is_a: related to
+  represented_as: edge
+  input_label: EquivalentTo
+  properties:
+    source: str
+
+# ============================================================
+# KEGG (Kyoto Encyclopedia of Genes and Genomes)
+# ============================================================
+
+kegg compound:
+  is_a: chemical substance
+  represented_as: node
+  preferred_id: kegg.compound
+  input_label: KEGGCompound
+  properties:
+    name: str
+    synonyms: str[]
+    formula: str
+    mass: float
+    xrefs: str
+    source: str
+
+kegg reaction:
+  is_a: biological process or activity
+  represented_as: node
+  preferred_id: kegg.reaction
+  input_label: KEGGReaction
+  properties:
+    enzyme_name: str
+    equation: str
+    ec_numbers: str[]
+    source: str
+
+kegg pathway:
+  is_a: pathway
+  represented_as: node
+  preferred_id: kegg.pathway
+  input_label: KEGGPathway
+  properties:
+    name: str
+    description: str
+    pathway_class: str
+    source: str
+
+compound participates in reaction:
+  is_a: related to
+  represented_as: edge
+  input_label: CompoundParticipatesInReaction
+
+reaction in pathway:
+  is_a: related to
+  represented_as: edge
+  input_label: ReactionInPathway
+
+# ============================================================
+# ComplexPortal (Protein Complexes)
+# ============================================================
+
+protein complex:
+  is_a: macromolecular complex
+  represented_as: node
+  preferred_id: complexportal
+  input_label: ProteinComplex
+  properties:
+    name: str
+    aliases: str
+    description: str
+    complex_assembly: str
+    species: str
+    go_annotations: str[]
+    num_components: int
+
+complex contains protein:
+  is_a: related to
+  represented_as: edge
+  input_label: ComplexContainsProtein
+  properties:
+    stoichiometry: int
+    species: str
+    original_id: str
+
+# ============================================================
+# InterPro (Protein Families and Domains)
+# ============================================================
+
+interpro entry:
+  is_a: polypeptide region
+  represented_as: node
+  preferred_id: interpro
+  input_label: InterProEntry
+  properties:
+    name: str
+    short_name: str
+    entry_type: str
+    go_terms: str[]
+
+interpro child of:
+  is_a: subclass of
+  represented_as: edge
+  input_label: InterProChildOf
+
+# ============================================================
+# STRING (Protein-Protein Interactions)
+# ============================================================
+
+protein interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: ProteinInteraction
+  properties:
+    combined_score: int
+    source_db: str
+
+# ============================================================
+# Reactome (Biological Pathways)
+# ============================================================
+
+reactome pathway:
+  is_a: pathway
+  represented_as: node
+  preferred_id: reactome
+  input_label: ReactomePathway
+  properties:
+    name: str
+    url: str
+    source: str
+
+gene participates in pathway:
+  is_a: related to
+  represented_as: edge
+  input_label: GeneParticipatesInPathway
+  properties:
+    evidence: str
+    source: str
+
+# ============================================================
+# Human Protein Atlas (Expression & Localization)
+# ============================================================
+
+subcellular location:
+  is_a: cellular component
+  represented_as: node
+  preferred_id: go
+  input_label: SubcellularLocation
+  properties:
+    name: str
+    go_id: str
+    source: str
+
+tissue:
+  is_a: gross anatomical structure
+  represented_as: node
+  preferred_id: hpa
+  input_label: Tissue
+  properties:
+    name: str
+    source: str
+
+gene localized to:
+  is_a: related to
+  represented_as: edge
+  input_label: GeneLocalizedTo
+  properties:
+    location_type: str
+    reliability: str
+
+gene expressed in:
+  is_a: related to
+  represented_as: edge
+  input_label: GeneExpressedIn
+  properties:
+    level: str
+    reliability: str
+    source: str
+
+# ============================================================
+# IntAct (Molecular Interactions)
+# ============================================================
+
+molecular interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: MolecularInteraction
+  properties:
+    confidence_score: float
+    detection_method: str
+    interaction_type: str
+    source_db: str
+
+# ============================================================
+# Compartments (Jensen Lab - Subcellular Localization)
+# ============================================================
+
+compartment location:
+  is_a: cellular component
+  represented_as: node
+  preferred_id: go
+  input_label: CompartmentLocation
+  properties:
+    name: str
+    source: str
+
+protein located in:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinLocatedIn
+  properties:
+    confidence: int
+    evidence_type: str
+    source_db: str
+
+# ============================================================
+# GPCRdb (G Protein-Coupled Receptors)
+# ============================================================
+
+gpcr family:
+  is_a: gene family
+  represented_as: node
+  preferred_id: gpcrdb
+  input_label: GPCRFamily
+  properties:
+    name: str
+    category_type: str
+    source: str
+
+gpcr classified as:
+  is_a: related to
+  represented_as: edge
+  input_label: GPCRClassifiedAs
+  properties:
+    level: str
+
+gpcr binds ligand:
+  is_a: related to
+  represented_as: edge
+  input_label: GPCRBindsLigand
+  properties:
+    ligand_name: str
+
+# ============================================================
+# ELM (Eukaryotic Linear Motifs)
+# ============================================================
+
+linear motif:
+  is_a: sequence feature
+  represented_as: node
+  preferred_id: elm
+  input_label: LinearMotif
+  properties:
+    elm_identifier: str
+    name: str
+    description: str
+    regex: str
+    motif_type: str
+    probability: float
+    num_instances: int
+    num_pdb_instances: int
+    source: str
+
+protein has motif:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinHasMotif
+  properties:
+    instance_accession: str
+    start_position: int
+    end_position: int
+    instance_logic: str
+    detection_methods: str
+    organism: str
+
+# ============================================================
+# Cell Ontology
+# ============================================================
+
+cell type:
+  is_a: cell
+  represented_as: node
+  preferred_id: cl
+  input_label: CellType
+  properties:
+    name: str
+    definition: str
+    synonyms: str
+    xrefs: str
+    source: str
+
+cell type is a:
+  is_a: subclass of
+  represented_as: edge
+  input_label: CellTypeIsA
+
+# ============================================================
+# Allen Brain Atlas (Brain Anatomy)
+# ============================================================
+
+brain region:
+  is_a: anatomical entity
+  represented_as: node
+  preferred_id: aba
+  input_label: BrainRegion
+  properties:
+    name: str
+    acronym: str
+    color_hex: str
+    graph_order: int
+    structure_level: int
+    source: str
+
+brain region part of:
+  is_a: related to
+  represented_as: edge
+  input_label: BrainRegionPartOf
+
+# ============================================================
+# Reactome Pathway Hierarchy (extension)
+# ============================================================
+
+pathway is part of pathway:
+  is_a: related to
+  represented_as: edge
+  input_label: PathwayIsPartOfPathway
+  properties:
+    source: str
+
+# ============================================================
+# NeuroElectro (Neuronal Electrophysiology)
+# ============================================================
+
+neuron type:
+  is_a: cell type
+  represented_as: node
+  preferred_id: neuroelectro
+  input_label: NeuronType
+  properties:
+    name: str
+    neuroelectro_id: str
+    neurolex_id: str
+    defining_criteria: str
+    source: str
+
+neuron ephys property:
+  is_a: related to
+  represented_as: edge
+  input_label: NeuronEphysProperty
+  properties:
+    property_name: str
+    mean_value: float
+    min_value: float
+    max_value: float
+    num_observations: int
+
+# ============================================================
+# SynGO (Synaptic Gene Ontologies)
+# ============================================================
+
+synaptic term:
+  is_a: biological process or activity
+  represented_as: node
+  preferred_id: go
+  input_label: SynapticTerm
+  properties:
+    name: str
+    domain: str
+    source: str
+
+gene annotated to synaptic term:
+  is_a: related to
+  represented_as: edge
+  input_label: GeneAnnotatedToSynapticTerm
+  properties:
+    go_domain: str
+    biological_system: str
+    experiment_assay: str
+    pubmed_id: str
+    source: str
+
+synaptic term is a:
+  is_a: subclass of
+  represented_as: edge
+  input_label: SynapticTermIsA
+
+# ============================================================
+# ENCODE SCREEN (Candidate cis-Regulatory Elements)
+# ============================================================
+
+cis regulatory element:
+  is_a: regulatory region
+  represented_as: node
+  preferred_id: encode
+  input_label: CisRegulatoryElement
+  properties:
+    screen_id: str
+    chromosome: str
+    start: int
+    end: int
+    ccre_type: str
+    genome_assembly: str
+    source: str
+
+# ============================================================
+# BioLiP (Ligand-Protein Interactions)
+# ============================================================
+
+pdb ligand:
+  is_a: chemical entity
+  represented_as: node
+  preferred_id: pdb
+  input_label: PDBLigand
+  properties:
+    name: str
+    ec_number: str
+    go_terms: str
+    source: str
+
+ligand binds protein:
+  is_a: related to
+  represented_as: edge
+  input_label: LigandBindsProtein
+  properties:
+    pdb_id: str
+    resolution: str
+    ec_number: str
+    source: str
+
+# ============================================================
+# TCDB (Transporter Classification Database)
+# ============================================================
+
+transporter family:
+  is_a: gene family
+  represented_as: node
+  preferred_id: tcdb
+  input_label: TransporterFamily
+  properties:
+    name: str
+    tc_class: str
+    source: str
+
+protein in transporter family:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinInTransporterFamily
+  properties:
+    tc_number: str
+    description: str
+    source: str
+
+# ============================================================
+# DGIdb (Drug Gene Interaction Database)
+# ============================================================
+
+drug:
+  is_a: chemical entity
+  represented_as: node
+  preferred_id: rxcui
+  input_label: Drug
+  properties:
+    name: str
+    approved: bool
+    source: str
+
+drug gene interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: DrugGeneInteraction
+  properties:
+    interaction_score: float
+    interaction_types: str
+    directionality: str
+    sources: str
+
+# ============================================================
+# GlyGen (Glycan Structures)
+# ============================================================
+
+glycan:
+  is_a: chemical entity
+  represented_as: node
+  preferred_id: glytoucan
+  input_label: Glycan
+  properties:
+    composition: str
+    mass: float
+    glycan_type: str
+    hit_score: float
+    publication_count: int
+    source: str
+
+# ============================================================
+# MatrisomeDB (Extracellular Matrix)
+# ============================================================
+
+matrisome protein:
+  is_a: polypeptide
+  represented_as: node
+  preferred_id: matrisome
+  input_label: MatrisomeProtein
+  properties:
+    gene_name: str
+    description: str
+    species: str
+    source: str
+
+protein detected in tissue:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinDetectedInTissue
+  properties:
+    species: str
+    reference: str
+    source: str
+
+# ============================================================
+# ExoCarta (Exosome Database)
+# ============================================================
+
+gene in exosome:
+  is_a: related to
+  represented_as: edge
+  input_label: GeneInExosome
+  properties:
+    species: str
+    content_types: str
+    detection_methods: str
+    num_experiments: int
+    source: str
+
+# ============================================================
+# CPDB (ConsensusPathDB)
+# ============================================================
+
+consensus interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: ConsensusInteraction
+  properties:
+    source_databases: str
+    num_publications: int
+    confidence: str
+    source: str
+
+# ============================================================
+# MobiDB (Intrinsic Disorder)
+# ============================================================
+
+protein has disorder:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinHasDisorder
+  properties:
+    disorder_regions: str
+    num_regions: int
+    content_fraction: float
+    disordered_residues: int
+    protein_length: int
+    source: str
+
+# ============================================================
+# iPTMnet (Post-Translational Modifications)
+# ============================================================
+
+protein has ptm:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinHasPTM
+  properties:
+    site: str
+    ptm_type: str
+    residue: str
+    score: int
+    enzymes: str
+    pmids: str
+    source: str
+
+# ============================================================
+# Dfam (Transposable Element Families)
+# ============================================================
+
+transposable element family:
+  is_a: nucleic acid entity
+  represented_as: node
+  preferred_id: dfam
+  input_label: TransposableElementFamily
+  properties:
+    name: str
+    title: str
+    consensus_length: int
+    repeat_type: str
+    repeat_subtype: str
+    classification: str
+    source: str
+
+# ============================================================
+# REPAIRtoire (DNA Repair Pathways)
+# ============================================================
+
+protein in repair pathway:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinInRepairPathway
+  properties:
+    gene_name: str
+    pathway_name: str
+    function: str
+    source: str
+
+# ============================================================
+# ComPPI (Compartmentalized PPI)
+# ============================================================
+
+compartmentalized interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: CompartmentalizedInteraction
+  properties:
+    interaction_score: float
+    system_type: str
+    source_db: str
+    source: str
+
+# ============================================================
+# FANTOM5 (Enhancers)
+# ============================================================
+
+enhancer:
+  is_a: regulatory region
+  represented_as: node
+  preferred_id: fantom5
+  input_label: Enhancer
+  properties:
+    chromosome: str
+    start: int
+    end: int
+    score: int
+    genome_assembly: str
+    source: str
+
+# ============================================================
+# Membranome (Transmembrane Proteins)
+# ============================================================
+
+membrane protein:
+  is_a: polypeptide
+  represented_as: node
+  preferred_id: membranome
+  input_label: MembraneProtein
+  properties:
+    name: str
+    uniprot_entry: str
+    membrane_thickness: float
+    tilt_angle: float
+    source: str
+
+# ============================================================
+# SLC Tables (Solute Carriers)
+# ============================================================
+
+slc transporter:
+  is_a: polypeptide
+  represented_as: node
+  preferred_id: uniprot
+  input_label: SLCTransporter
+  properties:
+    gene_name: str
+    protein_name: str
+    family: str
+    function: str
+    source: str
+
+# ============================================================
+# HistoneDB (Histone Variants)
+# ============================================================
+
+histone variant:
+  is_a: polypeptide
+  represented_as: node
+  preferred_id: histonedb
+  input_label: HistoneVariant
+  properties:
+    variant: str
+    histone_type: str
+    gene: str
+    score: float
+    source: str
+
+# ============================================================
+# MetalPDB (Metal Binding Sites)
+# ============================================================
+
+metal binding site:
+  is_a: related to
+  represented_as: edge
+  input_label: MetalBindingSite
+  properties:
+    metal: str
+    pfam: str
+    ec_number: str
+    num_ligands: int
+    source: str
+
+# ============================================================
+# ChEA3 (TF Target Interactions)
+# ============================================================
+
+tf target interaction:
+  is_a: related to
+  represented_as: edge
+  input_label: TFTargetInteraction
+  properties:
+    library: str
+    experiment: str
+    source: str
+
+# ============================================================
+# OpenProt (Alternative Proteins)
+# ============================================================
+
+alternative protein:
+  is_a: polypeptide
+  represented_as: node
+  preferred_id: openprot
+  input_label: AlternativeProtein
+  properties:
+    protein_type: str
+    gene_name: str
+    sequence_length: int
+    transcript_accessions: str
+    source: str
+
+# ============================================================
+# PTMcode (PTM Crosstalk)
+# ============================================================
+
+ptm crosstalk:
+  is_a: related to
+  represented_as: edge
+  input_label: PTMCrosstalk
+  properties:
+    ptm1_type: str
+    residue1: str
+    ptm2_type: str
+    residue2: str
+    evidence_types: str
+    source: str
+
+# ============================================================
+# ModelDB (Computational Neuroscience Models)
+# ============================================================
+
+computational model:
+  is_a: information content entity
+  represented_as: node
+  preferred_id: modeldb
+  input_label: ComputationalModel
+  properties:
+    name: str
+    cell_types: str
+    ion_channels: str
+    model_concepts: str
+    source: str
+
+# ============================================================
+# PeptideAtlas (Proteomics Detection)
+# ============================================================
+
+proteomics detection:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteomicsDetection
+  properties:
+    n_observations: int
+    n_distinct_peptides: int
+    presence_level: str
+    source: str
+
+# ============================================================
+# SABIO-RK (Enzyme Kinetics)
+# ============================================================
+
+kinetic parameter:
+  is_a: related to
+  represented_as: edge
+  input_label: KineticParameter
+  properties:
+    param_name: str
+    param_value: str
+    param_units: str
+    sbo_term: str
+    source: str
+
+# ============================================================
+# PDBe PISA (Protein Interfaces)
+# ============================================================
+
+protein interface:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: ProteinInterface
+  properties:
+    pdb_code: str
+    interface_area: float
+    n_hbonds: int
+    n_salt_bridges: int
+    source: str
+
+# ============================================================
+# ExPASy ENZYME (Enzyme Nomenclature)
+# ============================================================
+
+enzyme:
+  is_a: molecular entity
+  represented_as: node
+  preferred_id: ec
+  input_label: Enzyme
+  properties:
+    name: str
+    alternative_names: str
+    catalytic_activity: str
+    ec_class: str
+    source: str
+
+enzyme catalyzed by:
+  is_a: related to
+  represented_as: edge
+  input_label: EnzymeCatalyzedBy
+  properties:
+    ec_number: str
+    source: str
+
+# ============================================================
+# PhaSepDB (Phase Separation)
+# ============================================================
+
+phase separation:
+  is_a: related to
+  represented_as: edge
+  input_label: PhaseSeparation
+  properties:
+    location: str
+    material_state: str
+    ps_class: str
+    mlo: str
+    source: str
+
+# ============================================================
+# RNAgranuleDB (RNA Granules)
+# ============================================================
+
+gene in rna granule:
+  is_a: related to
+  represented_as: edge
+  input_label: GeneInRNAGranule
+  properties:
+    score: float
+    tier: str
+    source: str
+
+# ============================================================
+# Degronopedia (Degron Motifs)
+# ============================================================
+
+degron:
+  is_a: sequence feature
+  represented_as: node
+  preferred_id: degronopedia
+  input_label: Degron
+  properties:
+    regex: str
+    location: str
+    degron_type: str
+    ups_components: str
+    source: str
+
+# ============================================================
+# FerrDb (Ferroptosis Genes)
+# ============================================================
+
+gene in ferroptosis:
+  is_a: related to
+  represented_as: edge
+  input_label: GeneInFerroptosis
+  properties:
+    gene_name: str
+    role: str
+    n_experiments: int
+    source: str
+
+# ============================================================
+# PsychENCODE (Brain Regulatory Elements)
+# ============================================================
+
+enhancer promoter link:
+  is_a: related to
+  represented_as: edge
+  input_label: EnhancerPromoterLink
+  properties:
+    chromosome: str
+    tss: int
+    enhancer_start: int
+    enhancer_end: int
+    ensembl_id: str
+    source: str
+
+# ============================================================
+# ArrestinDB (GPCR-Arrestin Coupling)
+# ============================================================
+
+arrestin coupling:
+  is_a: related to
+  represented_as: edge
+  input_label: ArrestinCoupling
+  properties:
+    receptor_name: str
+    ligand: str
+    source: str
+
+# ============================================================
+# GtRNAdb (tRNA Genes)
+# ============================================================
+
+trna gene:
+  is_a: nucleic acid entity
+  represented_as: node
+  preferred_id: gtrnadb
+  input_label: tRNAGene
+  properties:
+    chromosome: str
+    start: int
+    end: int
+    strand: str
+    amino_acid: str
+    anticodon: str
+    has_intron: bool
+    score: float
+    source: str
+
+# ============================================================
+# Allen Brain Connectivity Atlas
+# ============================================================
+
+connectivity experiment:
+  is_a: information content entity
+  represented_as: node
+  preferred_id: allen_connectivity
+  input_label: ConnectivityExperiment
+  properties:
+    specimen_id: str
+    section_thickness: str
+    source: str
+
+# ============================================================
+# Translocatome (Protein Translocation)
+# ============================================================
+
+protein translocation:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinTranslocation
+  properties:
+    gene_name: str
+    confidence: str
+    localizations: str
+    evidence_score: float
+    source: str
+
+# ============================================================
+# 3D Genome Browser (TADs)
+# ============================================================
+
+topological domain:
+  is_a: genomic entity
+  represented_as: node
+  preferred_id: 3dgenome
+  input_label: TopologicalDomain
+  properties:
+    chromosome: str
+    start: int
+    end: int
+    name: str
+    score: int
+    experiment_id: str
+    genome_assembly: str
+    source: str
+
+# ============================================================
+# Adhesome (Cell Adhesion)
+# ============================================================
+
+adhesome interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: AdhesomeInteraction
+  properties:
+    interaction_type: str
+    source_db: str
+
+# ============================================================
+# BRENDA (Enzyme Database - extended)
+# Note: Enzyme and EnzymeCatalyzedBy already defined above via ExPASy
+# BRENDA adapter reuses the same schema entries
+# ============================================================
+
+# ============================================================
+# ChapNet (Chaperone Interaction Network)
+# ============================================================
+
+chaperone interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: ChaperoneInteraction
+  properties:
+    source_symbol: str
+    target_symbol: str
+    network: str
+    source_db: str
+
+# ============================================================
+# ENCORI / starBase (miRNA-Target Interactions)
+# ============================================================
+
+micro rna:
+  is_a: nucleic acid entity
+  represented_as: node
+  preferred_id: mirbase
+  input_label: MicroRNA
+  properties:
+    name: str
+    source: str
+
+mirna targets gene:
+  is_a: related to
+  represented_as: edge
+  input_label: MiRNATargetsGene
+  properties:
+    gene_name: str
+    clip_experiments: int
+    targetscan: int
+    source: str
+
+# ============================================================
+# EpiMap (Chromatin State Segmentation)
+# ============================================================
+
+chromatin state:
+  is_a: genomic entity
+  represented_as: node
+  preferred_id: epimap
+  input_label: ChromatinState
+  properties:
+    chromosome: str
+    start: int
+    end: int
+    state: str
+    biosample_id: str
+    genome_assembly: str
+    source: str
+
+# ============================================================
+# EVpedia (Extracellular Vesicle)
+# ============================================================
+
+ev origin:
+  is_a: anatomical entity
+  represented_as: node
+  preferred_id: evpedia
+  input_label: EVOrigin
+  properties:
+    name: str
+    category: str
+    cell_type: str
+    source: str
+
+circular rna:
+  is_a: nucleic acid entity
+  represented_as: node
+  preferred_id: evpedia
+  input_label: CircularRNA
+  properties:
+    position: str
+    strand: str
+    gene_symbol: str
+    gene_type: str
+    sample_type: str
+    source: str
+
+# ============================================================
+# LION (Lipid Ontology)
+# ============================================================
+
+lipid ontology term:
+  is_a: ontology class
+  represented_as: node
+  preferred_id: lion
+  input_label: LipidOntologyTerm
+  properties:
+    name: str
+    source: str
+
+lipid has ontology term:
+  is_a: related to
+  represented_as: edge
+  input_label: LipidHasOntologyTerm
+  properties:
+    lipid_name: str
+    source: str
+
+# ============================================================
+# RaftProt (Lipid Raft Proteomics)
+# ============================================================
+
+protein in lipid raft:
+  is_a: related to
+  represented_as: edge
+  input_label: ProteinInLipidRaft
+  properties:
+    gene_name: str
+    method: str
+    detergent: str
+    species: str
+    original_id: str
+    source: str
+
+# ============================================================
+# SILVA (rRNA Taxonomy)
+# ============================================================
+
+taxonomic entity:
+  is_a: organism taxon
+  represented_as: node
+  preferred_id: silva
+  input_label: TaxonomicEntity
+  properties:
+    name: str
+    rank: str
+    full_path: str
+    source: str
+
+taxon child of:
+  is_a: subclass of
+  represented_as: edge
+  input_label: TaxonChildOf
+  properties:
+    source: str
+
+# ============================================================
+# TarBase / miRDB (miRNA Target Predictions)
+# ============================================================
+
+mirna target prediction:
+  is_a: related to
+  represented_as: edge
+  input_label: MiRNATargetPrediction
+  properties:
+    prediction_score: float
+    source: str
+
+# ============================================================
+# GENCODE (Gene Annotations)
+# ============================================================
+
+gencode gene:
+  is_a: gene
+  represented_as: node
+  preferred_id: ensembl
+  input_label: GencodeGene
+  properties:
+    gene_name: str
+    gene_type: str
+    chromosome: str
+    start: int
+    end: int
+    strand: str
+    annotation_level: str
+    hgnc_id: str
+    source: str
+
+# ============================================================
+# JASPAR (TF Binding Profiles)
+# ============================================================
+
+tf binding profile:
+  is_a: information content entity
+  represented_as: node
+  preferred_id: jaspar
+  input_label: TFBindingProfile
+  properties:
+    name: str
+    base_id: str
+    version: str
+    collection: str
+    source: str
+
+# ============================================================
+# HuRI (Human Reference Interactome)
+# ============================================================
+
+reference interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: ReferenceInteraction
+  properties:
+    detection_method: str
+    source: str
+
+# ============================================================
+# APPRIS (Principal Isoforms)
+# ============================================================
+
+principal isoform:
+  is_a: related to
+  represented_as: edge
+  input_label: PrincipalIsoform
+  properties:
+    gene_name: str
+    ccds_id: str
+    appris_annotation: str
+    mane_status: str
+    source: str
+
+# ============================================================
+# RNAcentral (Non-coding RNAs)
+# ============================================================
+
+ncrna:
+  is_a: nucleic acid entity
+  represented_as: node
+  preferred_id: rnacentral
+  input_label: NcRNA
+  properties:
+    gene_name: str
+    rna_type: str
+    hgnc_id: str
+    databases: str
+    source: str
+
+# ============================================================
+# MODOMICS (RNA Modifications)
+# ============================================================
+
+rna modification:
+  is_a: chemical entity
+  represented_as: node
+  preferred_id: modomics
+  input_label: RNAModification
+  properties:
+    name: str
+    short_name: str
+    formula: str
+    mass_avg: float
+    reference_moiety: str
+    source: str
+
+# ============================================================
+# OPM (Membrane Protein Orientations)
+# ============================================================
+
+membrane orientation:
+  is_a: related to
+  represented_as: edge
+  input_label: MembraneOrientation
+  properties:
+    name: str
+    thickness: float
+    tilt: int
+    gibbs_energy: float
+    resolution: str
+    subunit_segments: int
+    family_name: str
+    species: str
+    membrane_type: str
+    source: str
+
+# ============================================================
+# PolyASite (Polyadenylation Sites)
+# ============================================================
+
+polya cluster:
+  is_a: genomic entity
+  represented_as: node
+  preferred_id: polyasite
+  input_label: PolyACluster
+  properties:
+    chromosome: str
+    start: int
+    end: int
+    strand: str
+    score: float
+    annotation: str
+    gene_name: str
+    num_protocols: str
+    source: str
+
+# ============================================================
+# DrLLPS (Liquid-Liquid Phase Separation)
+# ============================================================
+
+llps protein:
+  is_a: related to
+  represented_as: edge
+  input_label: LLPSProtein
+  properties:
+    gene_name: str
+    condensate: str
+    llps_type: str
+    ensembl_id: str
+    source: str
+
+# ============================================================
+# ATtRACT (RNA-Binding Protein Motifs)
+# ============================================================
+
+rbp motif:
+  is_a: sequence feature
+  represented_as: node
+  preferred_id: attract
+  input_label: RBPMotif
+  properties:
+    gene_name: str
+    motif_sequence: str
+    motif_length: str
+    experiment: str
+    database: str
+    source: str
+
+# ============================================================
+# circAtlas (Circular RNAs)
+# ============================================================
+
+circrna atlas:
+  is_a: nucleic acid entity
+  represented_as: node
+  preferred_id: circatlas
+  input_label: CircRNAAtlas
+  properties:
+    chromosome: str
+    start: int
+    end: int
+    strand: str
+    source: str
+
+# ============================================================
+# miRTarBase (Validated miRNA-Target Interactions)
+# ============================================================
+
+mirtarbase interaction:
+  is_a: related to
+  represented_as: edge
+  input_label: MiRTarBaseInteraction
+  properties:
+    support_type: str
+    experiments: str
+    source: str
+
+# ============================================================
+# MatrixDB (Extracellular Matrix Interactions)
+# ============================================================
+
+ecm interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: ECMInteraction
+  properties:
+    detection_method: str
+    source: str
+
+# ============================================================
+# NLSdb / Signal Peptides
+# ============================================================
+
+signal peptide:
+  is_a: related to
+  represented_as: edge
+  input_label: SignalPeptide
+  properties:
+    gene_name: str
+    peptide_type: str
+    peptide_info: str
+    source: str
+
+# ============================================================
+# NONCODE (Long Non-Coding RNAs)
+# ============================================================
+
+lncrna:
+  is_a: nucleic acid entity
+  represented_as: node
+  preferred_id: noncode
+  input_label: LncRNA
+  properties:
+    chromosome: str
+    start: int
+    end: int
+    strand: str
+    source: str
+
+# ============================================================
+# PsychENCODE GRN (Brain Gene Regulatory Network)
+# ============================================================
+
+brain grn:
+  is_a: related to
+  represented_as: edge
+  input_label: BrainGRN
+  properties:
+    enhancer_region: str
+    edge_weight: float
+    source: str
+
+# ============================================================
+# MitoCarta (Mitochondrial Proteome)
+# ============================================================
+
+mitochondrial protein:
+  is_a: related to
+  represented_as: edge
+  input_label: MitochondrialProtein
+  properties:
+    gene_symbol: str
+    description: str
+    maestro_score: int
+    evidence: str
+    source: str
+
+# ============================================================
+# UniProt Swiss-Prot (Human Proteome)
+# ============================================================
+
+uniprot protein:
+  is_a: protein
+  represented_as: node
+  preferred_id: uniprot
+  input_label: UniProtProtein
+  properties:
+    gene_name: str
+    protein_name: str
+    length: int
+    subcellular_location: str
+    function: str
+    tissue_specificity: str
+    source: str
+
+# ============================================================
+# GOA (Gene Ontology Annotations)
+# ============================================================
+
+go annotation:
+  is_a: related to
+  represented_as: edge
+  input_label: GOAnnotation
+  properties:
+    gene_symbol: str
+    qualifier: str
+    evidence_code: str
+    aspect: str
+    source: str
+
+# ============================================================
+# ClinVar (Clinical Variants)
+# ============================================================
+
+clinvar variant:
+  is_a: sequence variant
+  represented_as: node
+  preferred_id: clinvar
+  input_label: ClinVarVariant
+  properties:
+    type: str
+    name: str
+    gene_symbol: str
+    clinical_significance: str
+    chromosome: str
+    start: int
+    phenotype: str
+    review_status: str
+    source: str
+
+# ============================================================
+# REDIportal (RNA Editing Sites)
+# ============================================================
+
+rna editing site:
+  is_a: sequence variant
+  represented_as: node
+  preferred_id: rediportal
+  input_label: RNAEditingSite
+  properties:
+    chromosome: str
+    position: str
+    ref_base: str
+    edited_base: str
+    strand: str
+    repeat_type: str
+    functional_region: str
+    gene: str
+    gene_id: str
+    n_samples: int
+    n_tissues: int
+    dbsnp: str
+    source: str
+
+# ============================================================
+# NeuroMorpho (Neuron Morphology)
+# ============================================================
+
+neuron morphology:
+  is_a: named thing
+  represented_as: node
+  preferred_id: neuromorpho
+  input_label: NeuronMorphology
+  properties:
+    neuron_name: str
+    archive: str
+    brain_region: str
+    cell_type: str
+    gender: str
+    age_classification: str
+    stain: str
+    protocol: str
+    reconstruction_software: str
+    soma_surface: str
+    surface: str
+    volume: str
+    physical_integrity: str
+    source: str
+
+# ============================================================
+# OmniPath (Signaling Network)
+# ============================================================
+
+signaling interaction:
+  is_a: pairwise molecular interaction
+  represented_as: edge
+  input_label: SignalingInteraction
+  properties:
+    source_gene: str
+    target_gene: str
+    is_directed: str
+    is_stimulation: str
+    is_inhibition: str
+    databases: str
+    source: str
+
+# ============================================================
+# TISSUES (Tissue Expression - JensenLab)
+# ============================================================
+
+tissue expression:
+  is_a: association
+  represented_as: edge
+  input_label: TissueExpression
+  properties:
+    gene_symbol: str
+    tissue_name: str
+    evidence_source: str
+    confidence: str
+    score: float
+    source: str
+
+# ============================================================
+# Bgee (Gene Expression)
+# ============================================================
+
+gene expression:
+  is_a: association
+  represented_as: edge
+  input_label: GeneExpression
+  properties:
+    gene_name: str
+    anatomical_entity: str
+    expression_score: float
+    source: str
