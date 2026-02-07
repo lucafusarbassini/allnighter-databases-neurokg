@@ -1,0 +1,317 @@
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index 6bb471f..4f03956 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -909,3 +909,33 @@ proteomics detection:
+     n_distinct_peptides: int
+     presence_level: str
+     source: str
++
++# ============================================================
++# SABIO-RK (Enzyme Kinetics)
++# ============================================================
++
++kinetic parameter:
++  is_a: related to
++  represented_as: edge
++  input_label: KineticParameter
++  properties:
++    param_name: str
++    param_value: str
++    param_units: str
++    sbo_term: str
++    source: str
++
++# ============================================================
++# PDBe PISA (Protein Interfaces)
++# ============================================================
++
++protein interface:
++  is_a: pairwise molecular interaction
++  represented_as: edge
++  input_label: ProteinInterface
++  properties:
++    pdb_code: str
++    interface_area: float
++    n_hbonds: int
++    n_salt_bridges: int
++    source: str
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index c58e93a..2742d2c 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -348,6 +348,22 @@ try:
+ except Exception as e:
+     logger.warning(f"Could not load PeptideAtlas adapter: {e}")
+ 
++# --- SABIO-RK (Enzyme Kinetics) ---
++try:
++    from template_package.adapters.sabiork_adapter import SABIORKAdapter
++    adapters.append(("SABIORK", SABIORKAdapter()))
++    logger.info("Loaded SABIO-RK adapter")
++except Exception as e:
++    logger.warning(f"Could not load SABIO-RK adapter: {e}")
++
++# --- PDBe PISA (Protein Interfaces) ---
++try:
++    from template_package.adapters.pdbe_pisa_adapter import PDBePISAAdapter
++    adapters.append(("PDBePISA", PDBePISAAdapter()))
++    logger.info("Loaded PDBe PISA adapter")
++except Exception as e:
++    logger.warning(f"Could not load PDBe PISA adapter: {e}")
++
+ # ============================================================
+ # 3. Write nodes and edges from all adapters
+ # ============================================================
+diff --git a/template_package/adapters/pdbe_pisa_adapter.py b/template_package/adapters/pdbe_pisa_adapter.py
+new file mode 100644
+index 0000000..cc4c70a
+--- /dev/null
++++ b/template_package/adapters/pdbe_pisa_adapter.py
+@@ -0,0 +1,131 @@
++"""
++PDBe PISA (Protein Interfaces, Surfaces and Assemblies) Adapter for BioCypher.
++
++Loads PDBe PISA interface data and generates:
++- ProteinInterface edges (protein-protein interface with structural details)
++
++PISA analyzes macromolecular interfaces in crystal structures from PDB,
++identifying biologically relevant assemblies and interfaces.
++"""
++
++import xml.etree.ElementTree as ET
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class PDBePISAAdapter:
++    def __init__(self, data_dir="template_package/data/pdbe_pisa"):
++        self.data_dir = Path(data_dir)
++        self.interfaces = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load PDBe PISA interface XML files."""
++        logger.info("PDBe PISA: Loading interface data...")
++        count = 0
++
++        for xml_file in sorted(self.data_dir.glob('pisa_interfaces_*.xml')):
++            try:
++                tree = ET.parse(xml_file)
++                root = tree.getroot()
++
++                pdb_entry = root.find('pdb_entry')
++                if pdb_entry is None:
++                    continue
++
++                pdb_code = ''
++                pdb_code_el = pdb_entry.find('pdb_code')
++                if pdb_code_el is not None and pdb_code_el.text:
++                    pdb_code = pdb_code_el.text.strip()
++
++                # Process interfaces
++                for interface in pdb_entry.iter('interface'):
++                    iface_id = interface.findtext('id', '').strip()
++                    area = interface.findtext('int_area', '0').strip()
++                    solv_en = interface.findtext('int_solv_en', '0').strip()
++                    n_hbonds = interface.findtext('n_h-bonds', '0').strip()
++                    n_salt = interface.findtext('n_salt-bridges', '0').strip()
++
++                    # Get molecule info
++                    molecules = interface.findall('molecule')
++                    chain_ids = []
++                    for mol in molecules[:2]:
++                        chain_id = mol.findtext('chain_id', '').strip()
++                        if chain_id:
++                            chain_ids.append(chain_id)
++
++                    if len(chain_ids) >= 2:
++                        try:
++                            area_val = float(area)
++                        except ValueError:
++                            area_val = 0.0
++
++                        try:
++                            hbonds = int(float(n_hbonds))
++                        except ValueError:
++                            hbonds = 0
++
++                        try:
++                            salt_bridges = int(float(n_salt))
++                        except ValueError:
++                            salt_bridges = 0
++
++                        self.interfaces.append({
++                            'pdb_code': pdb_code,
++                            'interface_id': iface_id,
++                            'chain_a': chain_ids[0],
++                            'chain_b': chain_ids[1],
++                            'interface_area': area_val,
++                            'n_hbonds': hbonds,
++                            'n_salt_bridges': salt_bridges,
++                        })
++                        count += 1
++
++            except ET.ParseError:
++                logger.warning(f"PDBe PISA: Could not parse {xml_file.name}")
++
++        logger.info(f"PDBe PISA: Loaded {count} protein interfaces from {len(list(self.data_dir.glob('pisa_interfaces_*.xml')))} structures")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("PDBe PISA: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate ProteinInterface edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("PDBe PISA: Generating edges...")
++        count = 0
++
++        for iface in self.interfaces:
++            source_id = f"{iface['pdb_code']}_{iface['chain_a']}"
++            target_id = f"{iface['pdb_code']}_{iface['chain_b']}"
++
++            props = {
++                'pdb_code': iface['pdb_code'],
++                'interface_area': iface['interface_area'],
++                'n_hbonds': iface['n_hbonds'],
++                'n_salt_bridges': iface['n_salt_bridges'],
++                'source': 'PDBe_PISA',
++            }
++
++            yield (
++                None,
++                source_id,
++                target_id,
++                "ProteinInterface",
++                props
++            )
++            count += 1
++
++        logger.info(f"PDBe PISA: Generated {count} ProteinInterface edges")
+diff --git a/template_package/adapters/sabiork_adapter.py b/template_package/adapters/sabiork_adapter.py
+new file mode 100644
+index 0000000..f56c631
+--- /dev/null
++++ b/template_package/adapters/sabiork_adapter.py
+@@ -0,0 +1,109 @@
++"""
++SABIO-RK Adapter for BioCypher.
++
++Loads SABIO-RK enzyme kinetic data and generates:
++- KineticParameter edges (reaction kinetic parameters)
++
++SABIO-RK is a database for biochemical reaction kinetics, providing
++curated kinetic parameters (Km, Vmax, Ki, etc.) for biochemical reactions.
++"""
++
++import json
++import xml.etree.ElementTree as ET
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class SABIORKAdapter:
++    def __init__(self, data_dir="template_package/data/sabiork"):
++        self.data_dir = Path(data_dir)
++        self.kinetic_laws = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load SABIO-RK kinetic data from JSON and XML files."""
++        # Load JSON kinetics
++        json_path = self.data_dir / 'human_kinetics.json'
++        if json_path.exists():
++            logger.info("SABIO-RK: Loading JSON kinetic data...")
++            with open(json_path, 'r', encoding='utf-8') as f:
++                data = json.load(f)
++            laws = data.get('kinetic_laws', [])
++            for law in laws:
++                reaction_id = law.get('reaction_id', '')
++                reaction_name = law.get('reaction_name', '')
++                params = law.get('parameters', [])
++
++                for param in params:
++                    self.kinetic_laws.append({
++                        'reaction_id': reaction_id,
++                        'reaction_name': reaction_name,
++                        'param_name': param.get('name', ''),
++                        'param_value': param.get('value', ''),
++                        'param_units': param.get('units', ''),
++                        'sbo_term': param.get('sboTerm', ''),
++                    })
++
++        # Also try to parse XML files for additional data
++        for xml_file in sorted(self.data_dir.glob('human_kinetics_batch*.xml')):
++            try:
++                tree = ET.parse(xml_file)
++                root = tree.getroot()
++                ns = {'sbml': 'http://www.sbml.org/sbml/level2/version4'}
++                for reaction in root.iter('{http://www.sbml.org/sbml/level2/version4}reaction'):
++                    rxn_id = reaction.get('id', '')
++                    rxn_name = reaction.get('name', '')
++                    for param in reaction.iter('{http://www.sbml.org/sbml/level2/version4}parameter'):
++                        self.kinetic_laws.append({
++                            'reaction_id': rxn_id,
++                            'reaction_name': rxn_name,
++                            'param_name': param.get('name', ''),
++                            'param_value': param.get('value', ''),
++                            'param_units': param.get('units', ''),
++                            'sbo_term': param.get('sboTerm', ''),
++                        })
++            except ET.ParseError:
++                logger.warning(f"SABIO-RK: Could not parse {xml_file.name}")
++
++        logger.info(f"SABIO-RK: Loaded {len(self.kinetic_laws)} kinetic parameters")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("SABIO-RK: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate KineticParameter edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("SABIO-RK: Generating edges...")
++        count = 0
++
++        for law in self.kinetic_laws:
++            props = {
++                'param_name': self._sanitize(law['param_name']),
++                'param_value': law['param_value'],
++                'param_units': law['param_units'],
++                'sbo_term': law['sbo_term'],
++                'source': 'SABIO-RK',
++            }
++
++            yield (
++                None,
++                law['reaction_id'],
++                f"KINETIC:{law['reaction_id']}_{law['param_name']}",
++                "KineticParameter",
++                props
++            )
++            count += 1
++
++        logger.info(f"SABIO-RK: Generated {count} KineticParameter edges")

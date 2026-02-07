@@ -1,0 +1,278 @@
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index 9190b97..b6f9fc2 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -1050,3 +1050,37 @@ arrestin coupling:
+     receptor_name: str
+     ligand: str
+     source: str
++
++# ============================================================
++# GtRNAdb (tRNA Genes)
++# ============================================================
++
++trna gene:
++  is_a: nucleic acid entity
++  represented_as: node
++  preferred_id: gtrnadb
++  input_label: tRNAGene
++  properties:
++    chromosome: str
++    start: int
++    end: int
++    strand: str
++    amino_acid: str
++    anticodon: str
++    has_intron: bool
++    score: float
++    source: str
++
++# ============================================================
++# Allen Brain Connectivity Atlas
++# ============================================================
++
++connectivity experiment:
++  is_a: information content entity
++  represented_as: node
++  preferred_id: allen_connectivity
++  input_label: ConnectivityExperiment
++  properties:
++    specimen_id: str
++    section_thickness: str
++    source: str
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index 452439c..c7fa994 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -420,6 +420,22 @@ try:
+ except Exception as e:
+     logger.warning(f"Could not load ArrestinDB adapter: {e}")
+ 
++# --- GtRNAdb (tRNA Genes) ---
++try:
++    from template_package.adapters.gtrnadb_adapter import GtRNAdbAdapter
++    adapters.append(("GtRNAdb", GtRNAdbAdapter()))
++    logger.info("Loaded GtRNAdb adapter")
++except Exception as e:
++    logger.warning(f"Could not load GtRNAdb adapter: {e}")
++
++# --- Allen Brain Connectivity Atlas ---
++try:
++    from template_package.adapters.allen_connectivity_adapter import AllenConnectivityAdapter
++    adapters.append(("AllenConnectivity", AllenConnectivityAdapter()))
++    logger.info("Loaded Allen Connectivity adapter")
++except Exception as e:
++    logger.warning(f"Could not load Allen Connectivity adapter: {e}")
++
+ # ============================================================
+ # 3. Write nodes and edges from all adapters
+ # ============================================================
+diff --git a/template_package/adapters/allen_connectivity_adapter.py b/template_package/adapters/allen_connectivity_adapter.py
+new file mode 100644
+index 0000000..e65905c
+--- /dev/null
++++ b/template_package/adapters/allen_connectivity_adapter.py
+@@ -0,0 +1,89 @@
++"""
++Allen Brain Connectivity Atlas Adapter for BioCypher.
++
++Loads Allen Institute mouse brain connectivity experiment data and generates:
++- ConnectivityExperiment nodes (tract-tracing experiments)
++
++The Allen Mouse Brain Connectivity Atlas maps neural connections
++through viral tracer injections and whole-brain serial two-photon imaging.
++"""
++
++import csv
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class AllenConnectivityAdapter:
++    def __init__(self, data_dir="template_package/data/allen_connectivity"):
++        self.data_dir = Path(data_dir)
++        self.experiments = []
++        self.projections = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load Allen Connectivity data."""
++        # Load experiment summary
++        csv_path = self.data_dir / 'experiment_summary.csv'
++        if csv_path.exists():
++            logger.info("Allen Connectivity: Loading experiment summary...")
++            with open(csv_path, 'r', encoding='utf-8') as f:
++                reader = csv.DictReader(f)
++                for row in reader:
++                    exp_id = row.get('experiment_id', '').strip()
++                    failed = row.get('failed', '').strip()
++
++                    if not exp_id or failed == 'True':
++                        continue
++
++                    self.experiments.append({
++                        'id': exp_id,
++                        'specimen_id': row.get('specimen_id', '').strip(),
++                        'section_thickness': row.get('section_thickness', '').strip(),
++                    })
++
++            logger.info(f"Allen Connectivity: Loaded {len(self.experiments)} experiments")
++
++        # Load projection summary
++        proj_path = self.data_dir / 'projection_summary.csv'
++        if proj_path.exists():
++            logger.info("Allen Connectivity: Loading projection summary...")
++            with open(proj_path, 'r', encoding='utf-8') as f:
++                reader = csv.DictReader(f)
++                for row in reader:
++                    self.projections.append(row)
++
++            logger.info(f"Allen Connectivity: Loaded {len(self.projections)} projection entries")
++
++    def get_nodes(self):
++        """
++        Generate ConnectivityExperiment nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("Allen Connectivity: Generating nodes...")
++        count = 0
++
++        for exp in self.experiments:
++            props = {
++                'specimen_id': exp['specimen_id'],
++                'section_thickness': exp['section_thickness'],
++                'source': 'Allen_Connectivity',
++            }
++
++            yield (f"ALLEN_CONN:{exp['id']}", "ConnectivityExperiment", props)
++            count += 1
++
++        logger.info(f"Allen Connectivity: Generated {count} ConnectivityExperiment nodes")
++
++    def get_edges(self):
++        """No edges for now."""
++        logger.info("Allen Connectivity: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/gtrnadb_adapter.py b/template_package/adapters/gtrnadb_adapter.py
+new file mode 100644
+index 0000000..45da5c5
+--- /dev/null
++++ b/template_package/adapters/gtrnadb_adapter.py
+@@ -0,0 +1,108 @@
++"""
++GtRNAdb Adapter for BioCypher.
++
++Loads GtRNAdb human tRNA gene data and generates:
++- tRNAGene nodes (tRNA genes with anticodon and genomic location)
++
++GtRNAdb catalogs transfer RNA genes identified by tRNAscan-SE
++across genomes, providing anticodon, amino acid, and structure info.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class GtRNAdbAdapter:
++    def __init__(self, data_dir="template_package/data/gtrnadb"):
++        self.data_dir = Path(data_dir)
++        self.trnas = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load GtRNAdb tRNA gene data."""
++        path = self.data_dir / 'tRNAs_ucsc.txt.gz'
++        if not path.exists():
++            logger.warning("GtRNAdb: tRNA data file not found")
++            return
++
++        logger.info("GtRNAdb: Loading tRNA gene data...")
++        count = 0
++
++        with gzip.open(path, 'rt', encoding='utf-8') as f:
++            for line in f:
++                parts = line.strip().split('\t')
++                if len(parts) < 10:
++                    continue
++
++                chrom = parts[1]
++                start = parts[2]
++                end = parts[3]
++                name = parts[4]
++                score = parts[0]
++                strand = parts[6]
++                amino_acid = parts[7]
++                anticodon = parts[8]
++                intron_info = parts[9]
++                trna_score = parts[10] if len(parts) > 10 else '0'
++
++                try:
++                    start_int = int(start)
++                    end_int = int(end)
++                    score_val = float(trna_score)
++                except ValueError:
++                    continue
++
++                self.trnas.append({
++                    'name': name,
++                    'chromosome': chrom,
++                    'start': start_int,
++                    'end': end_int,
++                    'strand': strand,
++                    'amino_acid': amino_acid,
++                    'anticodon': anticodon,
++                    'intron': intron_info,
++                    'score': score_val,
++                })
++                count += 1
++
++        logger.info(f"GtRNAdb: Loaded {count} tRNA genes")
++
++    def get_nodes(self):
++        """
++        Generate tRNAGene nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("GtRNAdb: Generating nodes...")
++        count = 0
++
++        for trna in self.trnas:
++            props = {
++                'chromosome': trna['chromosome'],
++                'start': trna['start'],
++                'end': trna['end'],
++                'strand': trna['strand'],
++                'amino_acid': trna['amino_acid'],
++                'anticodon': trna['anticodon'],
++                'has_intron': 'intron' in trna['intron'].lower() and 'no' not in trna['intron'].lower(),
++                'score': trna['score'],
++                'source': 'GtRNAdb',
++            }
++
++            yield (f"tRNA:{trna['name']}", "tRNAGene", props)
++            count += 1
++
++        logger.info(f"GtRNAdb: Generated {count} tRNAGene nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("GtRNAdb: No edges to generate")
++        return iter([])

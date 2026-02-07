@@ -1,0 +1,559 @@
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index bd5989b..325683d 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -1474,3 +1474,58 @@ circrna atlas:
+     end: int
+     strand: str
+     source: str
++
++# ============================================================
++# miRTarBase (Validated miRNA-Target Interactions)
++# ============================================================
++
++mirtarbase interaction:
++  is_a: related to
++  represented_as: edge
++  input_label: MiRTarBaseInteraction
++  properties:
++    support_type: str
++    experiments: str
++    source: str
++
++# ============================================================
++# MatrixDB (Extracellular Matrix Interactions)
++# ============================================================
++
++ecm interaction:
++  is_a: pairwise molecular interaction
++  represented_as: edge
++  input_label: ECMInteraction
++  properties:
++    detection_method: str
++    source: str
++
++# ============================================================
++# NLSdb / Signal Peptides
++# ============================================================
++
++signal peptide:
++  is_a: related to
++  represented_as: edge
++  input_label: SignalPeptide
++  properties:
++    gene_name: str
++    peptide_type: str
++    peptide_info: str
++    source: str
++
++# ============================================================
++# NONCODE (Long Non-Coding RNAs)
++# ============================================================
++
++lncrna:
++  is_a: nucleic acid entity
++  represented_as: node
++  preferred_id: noncode
++  input_label: LncRNA
++  properties:
++    chromosome: str
++    start: int
++    end: int
++    strand: str
++    source: str
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index fc4a340..663c077 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -629,6 +629,38 @@ try:
+ except Exception as e:
+     logger.warning(f"Could not load circAtlas adapter: {e}")
+ 
++# --- miRTarBase (Validated miRNA-Target Interactions) ---
++try:
++    from template_package.adapters.mirtarbase_adapter import MiRTarBaseAdapter
++    adapters.append(("miRTarBase", MiRTarBaseAdapter()))
++    logger.info("Loaded miRTarBase adapter")
++except Exception as e:
++    logger.warning(f"Could not load miRTarBase adapter: {e}")
++
++# --- MatrixDB (Extracellular Matrix Interactions) ---
++try:
++    from template_package.adapters.matrixdb_adapter import MatrixDBAdapter
++    adapters.append(("MatrixDB", MatrixDBAdapter()))
++    logger.info("Loaded MatrixDB adapter")
++except Exception as e:
++    logger.warning(f"Could not load MatrixDB adapter: {e}")
++
++# --- NLSdb / Signal Peptides ---
++try:
++    from template_package.adapters.nlsdb_adapter import NLSdbAdapter
++    adapters.append(("NLSdb", NLSdbAdapter()))
++    logger.info("Loaded NLSdb adapter")
++except Exception as e:
++    logger.warning(f"Could not load NLSdb adapter: {e}")
++
++# --- NONCODE (Long Non-Coding RNAs) ---
++try:
++    from template_package.adapters.noncode_adapter import NONCODEAdapter
++    adapters.append(("NONCODE", NONCODEAdapter()))
++    logger.info("Loaded NONCODE adapter")
++except Exception as e:
++    logger.warning(f"Could not load NONCODE adapter: {e}")
++
+ # ============================================================
+ # 3. Write nodes and edges from all adapters
+ # ============================================================
+diff --git a/template_package/adapters/matrixdb_adapter.py b/template_package/adapters/matrixdb_adapter.py
+new file mode 100644
+index 0000000..24e967c
+--- /dev/null
++++ b/template_package/adapters/matrixdb_adapter.py
+@@ -0,0 +1,119 @@
++"""
++MatrixDB Adapter for BioCypher.
++
++Loads MatrixDB extracellular matrix interaction data and generates:
++- ECMInteraction edges (extracellular matrix protein-protein interactions)
++
++MatrixDB is a database focused on interactions established by extracellular
++matrix proteins, proteoglycans, and polysaccharides.
++"""
++
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class MatrixDBAdapter:
++    def __init__(self, data_dir="template_package/data/matrixdb"):
++        self.data_dir = Path(data_dir)
++        self.interactions = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load MatrixDB interaction data from MITAB format."""
++        path = self.data_dir / 'matrixdb_CORE.tab'
++        if not path.exists():
++            logger.warning("MatrixDB: CORE interaction file not found")
++            return
++
++        logger.info("MatrixDB: Loading ECM interactions...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            for line in f:
++                if line.startswith('#'):
++                    continue
++                parts = line.strip().split('\t')
++                if len(parts) < 15:
++                    continue
++
++                id_a = parts[0].strip()
++                id_b = parts[1].strip()
++                detection_method = parts[6].strip()
++                publication = parts[8].strip()
++                taxid_a = parts[9].strip()
++                taxid_b = parts[10].strip()
++                interaction_type = parts[11].strip()
++
++                # Extract UniProt IDs
++                a_id = id_a.split(':')[-1] if ':' in id_a else id_a
++                b_id = id_b.split(':')[-1] if ':' in id_b else id_b
++
++                # Clean up IDs (remove quotes)
++                a_id = a_id.strip('"').strip("'")
++                b_id = b_id.strip('"').strip("'")
++
++                if not a_id or not b_id:
++                    continue
++
++                # Extract short detection method
++                method_short = ''
++                if 'MI:' in detection_method:
++                    import re
++                    m = re.search(r'"([^"]*)"[)]\s*$', detection_method)
++                    if m:
++                        method_short = m.group(1)
++
++                self.interactions.append({
++                    'id_a': a_id,
++                    'id_b': b_id,
++                    'detection_method': method_short,
++                    'interaction_type': interaction_type,
++                })
++                count += 1
++
++        logger.info(f"MatrixDB: Loaded {count} ECM interactions")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("MatrixDB: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate ECMInteraction edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("MatrixDB: Generating edges...")
++        seen = set()
++        count = 0
++
++        for interaction in self.interactions:
++            key = tuple(sorted([interaction['id_a'], interaction['id_b']]))
++            if key in seen:
++                continue
++            seen.add(key)
++
++            props = {
++                'detection_method': self._sanitize(interaction['detection_method']),
++                'source': 'MatrixDB',
++            }
++
++            yield (
++                None,
++                interaction['id_a'],
++                interaction['id_b'],
++                "ECMInteraction",
++                props
++            )
++            count += 1
++
++        logger.info(f"MatrixDB: Generated {count} ECMInteraction edges")
+diff --git a/template_package/adapters/mirtarbase_adapter.py b/template_package/adapters/mirtarbase_adapter.py
+new file mode 100644
+index 0000000..012220d
+--- /dev/null
++++ b/template_package/adapters/mirtarbase_adapter.py
+@@ -0,0 +1,102 @@
++"""
++miRTarBase Adapter for BioCypher.
++
++Loads miRTarBase experimentally validated miRNA-target interactions and generates:
++- MiRTarBaseInteraction edges (miRNA → target gene validated interactions)
++
++miRTarBase is the largest curated database of experimentally validated
++miRNA-target interactions, with evidence from reporter assays, Western blots, etc.
++"""
++
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class MiRTarBaseAdapter:
++    def __init__(self, data_dir="template_package/data/mirtarbase"):
++        self.data_dir = Path(data_dir)
++        self.interactions = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load miRTarBase validated interactions."""
++        path = self.data_dir / 'hsa_MTI_v10.csv'
++        if not path.exists():
++            path = self.data_dir / 'hsa_MTI.csv'
++        if not path.exists():
++            logger.warning("miRTarBase: interaction data not found")
++            return
++
++        logger.info("miRTarBase: Loading miRNA-target interactions...")
++        count = 0
++        seen = set()
++
++        with open(path, 'r', encoding='utf-8-sig') as f:
++            reader = csv.DictReader(f)
++            for row in reader:
++                mirna = (row.get('miRNA') or '').strip()
++                target_gene = (row.get('Target Gene') or '').strip()
++                support_type = (row.get('Support Type') or '').strip()
++                experiments = (row.get('Experiments') or '').strip()
++                species_mirna = (row.get('Species (miRNA)') or '').strip()
++
++                if not mirna or not target_gene:
++                    continue
++                if species_mirna != 'hsa':
++                    continue
++
++                # Deduplicate by miRNA-target pair, keeping strongest evidence
++                key = (mirna, target_gene)
++                if key in seen:
++                    continue
++                seen.add(key)
++
++                self.interactions.append({
++                    'mirna': mirna,
++                    'target_gene': target_gene,
++                    'support_type': support_type,
++                    'experiments': experiments,
++                })
++                count += 1
++
++        logger.info(f"miRTarBase: Loaded {count} unique miRNA-target interactions")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("miRTarBase: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate MiRTarBaseInteraction edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("miRTarBase: Generating edges...")
++        count = 0
++
++        for interaction in self.interactions:
++            props = {
++                'support_type': self._sanitize(interaction['support_type']),
++                'experiments': self._sanitize(interaction['experiments']),
++                'source': 'miRTarBase',
++            }
++
++            yield (
++                None,
++                interaction['mirna'],
++                interaction['target_gene'],
++                "MiRTarBaseInteraction",
++                props
++            )
++            count += 1
++
++        logger.info(f"miRTarBase: Generated {count} MiRTarBaseInteraction edges")
+diff --git a/template_package/adapters/nlsdb_adapter.py b/template_package/adapters/nlsdb_adapter.py
+new file mode 100644
+index 0000000..0395674
+--- /dev/null
++++ b/template_package/adapters/nlsdb_adapter.py
+@@ -0,0 +1,107 @@
++"""
++NLSdb / UniProt Signal Peptide Adapter for BioCypher.
++
++Loads UniProt signal peptide and transit peptide annotations and generates:
++- SignalPeptide edges (proteins with signal/transit peptide annotations)
++
++Provides localization signal information for human proteins.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class NLSdbAdapter:
++    def __init__(self, data_dir="template_package/data/nlsdb"):
++        self.data_dir = Path(data_dir)
++        self.proteins = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load UniProt signal peptide data."""
++        path = self.data_dir / 'uniprot_signals.tsv'
++        if not path.exists():
++            logger.warning("NLSdb: signal peptide data not found")
++            return
++
++        logger.info("NLSdb: Loading signal peptide annotations...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            header = None
++            for line in f:
++                parts = line.strip().split('\t')
++                if header is None:
++                    header = parts
++                    continue
++
++                if len(parts) < 4:
++                    continue
++
++                entry = parts[0].strip()
++                gene_names = parts[1].strip()
++                signal_peptide = parts[2].strip() if len(parts) > 2 else ''
++                transit_peptide = parts[3].strip() if len(parts) > 3 else ''
++
++                if not entry:
++                    continue
++                if not signal_peptide and not transit_peptide:
++                    continue
++
++                peptide_type = 'signal' if signal_peptide else 'transit'
++                peptide_info = signal_peptide if signal_peptide else transit_peptide
++
++                self.proteins.append({
++                    'uniprot': entry,
++                    'gene_name': gene_names.split()[0] if gene_names else '',
++                    'peptide_type': peptide_type,
++                    'peptide_info': peptide_info,
++                })
++                count += 1
++
++        logger.info(f"NLSdb: Loaded {count} signal/transit peptide annotations")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("NLSdb: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate SignalPeptide edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("NLSdb: Generating edges...")
++        seen = set()
++        count = 0
++
++        for prot in self.proteins:
++            if prot['uniprot'] in seen:
++                continue
++            seen.add(prot['uniprot'])
++
++            props = {
++                'gene_name': self._sanitize(prot['gene_name']),
++                'peptide_type': prot['peptide_type'],
++                'peptide_info': self._sanitize(prot['peptide_info'][:200]),
++                'source': 'UniProt_SignalP',
++            }
++
++            yield (
++                None,
++                prot['uniprot'],
++                prot['peptide_type'],
++                "SignalPeptide",
++                props
++            )
++            count += 1
++
++        logger.info(f"NLSdb: Generated {count} SignalPeptide edges")
+diff --git a/template_package/adapters/noncode_adapter.py b/template_package/adapters/noncode_adapter.py
+new file mode 100644
+index 0000000..c70929d
+--- /dev/null
++++ b/template_package/adapters/noncode_adapter.py
+@@ -0,0 +1,101 @@
++"""
++NONCODE Adapter for BioCypher.
++
++Loads NONCODE v6 human lncRNA annotations and generates:
++- LncRNA nodes (long non-coding RNA annotations with genomic coordinates)
++
++NONCODE is an integrated knowledge database of non-coding RNAs,
++providing comprehensive lncRNA annotations.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class NONCODEAdapter:
++    def __init__(self, data_dir="template_package/data/noncode"):
++        self.data_dir = Path(data_dir)
++        self.lncrnas = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load NONCODE lncRNA BED data."""
++        path = self.data_dir / 'noncode_lncgene.bed.gz'
++        if not path.exists():
++            logger.warning("NONCODE: BED file not found")
++            return
++
++        logger.info("NONCODE: Loading lncRNA annotations...")
++        count = 0
++
++        try:
++            with gzip.open(path, 'rt', encoding='utf-8', errors='ignore') as f:
++                for line in f:
++                    parts = line.strip().split('\t')
++                    if len(parts) < 6:
++                        continue
++
++                    chrom = parts[0]
++                    start = parts[1]
++                    end = parts[2]
++                    name = parts[3]
++                    score = parts[4]
++                    strand = parts[5]
++
++                    if not chrom.startswith('chr'):
++                        continue
++
++                    try:
++                        start_int = int(start)
++                        end_int = int(end)
++                    except ValueError:
++                        continue
++
++                    self.lncrnas.append({
++                        'name': name,
++                        'chromosome': chrom,
++                        'start': start_int,
++                        'end': end_int,
++                        'strand': strand,
++                    })
++                    count += 1
++        except EOFError:
++            logger.warning("NONCODE: Truncated gzip file, loaded partial data")
++
++        logger.info(f"NONCODE: Loaded {count} lncRNA annotations")
++
++    def get_nodes(self):
++        """
++        Generate LncRNA nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("NONCODE: Generating nodes...")
++        count = 0
++
++        for lncrna in self.lncrnas:
++            props = {
++                'chromosome': lncrna['chromosome'],
++                'start': lncrna['start'],
++                'end': lncrna['end'],
++                'strand': lncrna['strand'],
++                'source': 'NONCODEv6',
++            }
++
++            yield (f"NONCODE:{lncrna['name']}", "LncRNA", props)
++            count += 1
++
++        logger.info(f"NONCODE: Generated {count} LncRNA nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("NONCODE: No edges to generate")
++        return iter([])

@@ -1,0 +1,1704 @@
+diff --git a/.claude/agents/agent-adapter-builder.md b/.claude/agents/agent-adapter-builder.md
+new file mode 100644
+index 0000000..3733c9d
+--- /dev/null
++++ b/.claude/agents/agent-adapter-builder.md
+@@ -0,0 +1,15 @@
++# Agent: Adapter Builder
++
++## Purpose
++Builds BioCypher adapters for biological databases following the established adapter pattern.
++
++## Pattern
++- Each adapter is a Python class with `__init__`, `get_nodes()`, and `get_edges()` methods
++- `get_nodes()` yields 3-tuples: (id, label, properties_dict)
++- `get_edges()` yields 5-tuples: (id, source_id, target_id, label, properties_dict)
++- Labels must match `input_label` in schema_config.yaml
++- Sanitize quotes in string fields (replace " with "")
++- Data files are in template_package/data/<database>/
++
++## Reference
++See template_package/adapters/liana_adapter.py for the canonical pattern.
+diff --git a/.claude/agents/agent-data-downloader.md b/.claude/agents/agent-data-downloader.md
+new file mode 100644
+index 0000000..7f3dc41
+--- /dev/null
++++ b/.claude/agents/agent-data-downloader.md
+@@ -0,0 +1,12 @@
++# Agent: Data Downloader
++
++## Purpose
++Downloads biological databases from public sources and prepares them for adapter processing.
++
++## Guidelines
++- Download to template_package/data/<database_name>/
++- Create download manifest JSON with file checksums
++- Create analysis report in ANALYSIS.md
++- Use streaming downloads for large files
++- Support resume on interrupted downloads
++- Respect rate limits on APIs
+diff --git a/.claude/agents/agent-schema-designer.md b/.claude/agents/agent-schema-designer.md
+new file mode 100644
+index 0000000..07c24a9
+--- /dev/null
++++ b/.claude/agents/agent-schema-designer.md
+@@ -0,0 +1,12 @@
++# Agent: Schema Designer
++
++## Purpose
++Designs and updates the BioCypher schema configuration for new database integrations.
++
++## Guidelines
++- Use BioLink ontology names in sentence case for schema keys
++- Use PascalCase for input_label values
++- Use `is_a` for custom ontology branches
++- Properties: str, int, float, bool, str[], int[], float[], bool[]
++- Cross-references stored as JSON string
++- Reference: config/schema_config.yaml and INSTRUCTIONS.md
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index 0e2aa8f..ef7de98 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -1,4 +1,9 @@
+-# add your desired knowledge graph components here
++# BioCypher Knowledge Graph Schema Configuration
++# Uses BioLink ontology names in sentence case
++
++# ============================================================
++# EXISTING: LIANA (Ligand-Receptor Interactions)
++# ============================================================
+ 
+ gene:
+   represented_as: node
+@@ -15,4 +20,169 @@ ligand receptor interaction:
+   represented_as: edge
+   input_label: LigandReceptorInteraction
+   properties:
+-    species: str[]
+\ No newline at end of file
++    species: str[]
++
++# ============================================================
++# ChEBI (Chemical Entities of Biological Interest)
++# ============================================================
++
++chemical substance:
++  is_a: chemical entity
++  represented_as: node
++  preferred_id: chebi
++  input_label: ChemicalSubstance
++  properties:
++    name: str
++    definition: str
++    formula: str
++    charge: int
++    mass: float
++    stars: int
++    synonyms: str[]
++    xrefs: str
++
++subclass of:
++  is_a: related to
++  represented_as: edge
++  input_label: SubclassOf
++
++chemical relation:
++  is_a: related to
++  represented_as: edge
++  input_label: ChemicalRelation
++  properties:
++    relation_type: str
++
++# ============================================================
++# Rhea (Biochemical Reactions)
++# ============================================================
++
++biochemical reaction:
++  is_a: biological process or activity
++  represented_as: node
++  preferred_id: rhea
++  input_label: BiochemicalReaction
++  properties:
++    rhea_id: str
++    direction: str
++    master_id: str
++    ec_number: str[]
++    smiles: str
++    equation: str
++    xrefs: str
++
++reaction variant:
++  is_a: related to
++  represented_as: edge
++  input_label: ReactionVariant
++  properties:
++    variant_type: str
++
++has substrate:
++  is_a: related to
++  represented_as: edge
++  input_label: HasSubstrate
++
++has product:
++  is_a: related to
++  represented_as: edge
++  input_label: HasProduct
++
++# ============================================================
++# LIPID MAPS Structure Database
++# ============================================================
++
++lipid:
++  is_a: chemical substance
++  represented_as: node
++  preferred_id: lipidmaps
++  input_label: Lipid
++  properties:
++    name: str
++    systematic_name: str
++    abbreviation: str
++    formula: str
++    mass: float
++    inchi: str
++    inchi_key: str
++    smiles: str
++    category: str
++    main_class: str
++    sub_class: str
++    class_level4: str
++    synonyms: str[]
++    xrefs: str
++    source: str
++
++lipid category:
++  represented_as: node
++  preferred_id: lipidmaps_cat
++  input_label: LipidCategory
++  properties:
++    code: str
++    name: str
++    level: str
++
++lipid classified as:
++  is_a: related to
++  represented_as: edge
++  input_label: LipidClassifiedAs
++  properties:
++    classification_level: str
++    classification_type: str
++
++equivalent to:
++  is_a: related to
++  represented_as: edge
++  input_label: EquivalentTo
++  properties:
++    source: str
++
++# ============================================================
++# KEGG (Kyoto Encyclopedia of Genes and Genomes)
++# ============================================================
++
++kegg compound:
++  is_a: chemical substance
++  represented_as: node
++  preferred_id: kegg.compound
++  input_label: KEGGCompound
++  properties:
++    name: str
++    synonyms: str[]
++    formula: str
++    mass: float
++    xrefs: str
++    source: str
++
++kegg reaction:
++  is_a: biological process or activity
++  represented_as: node
++  preferred_id: kegg.reaction
++  input_label: KEGGReaction
++  properties:
++    enzyme_name: str
++    equation: str
++    ec_numbers: str[]
++    source: str
++
++kegg pathway:
++  is_a: pathway
++  represented_as: node
++  preferred_id: kegg.pathway
++  input_label: KEGGPathway
++  properties:
++    name: str
++    description: str
++    pathway_class: str
++    source: str
++
++compound participates in reaction:
++  is_a: related to
++  represented_as: edge
++  input_label: CompoundParticipatesInReaction
++
++reaction in pathway:
++  is_a: related to
++  represented_as: edge
++  input_label: ReactionInPathway
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index 1bfe50e..86e0d5c 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -1,20 +1,87 @@
+-import biocypher
+-from template_package.adapters.liana_adapter import LianaAdapter
+-from biocypher._logger import logger 
++"""
++Main script to create the unified knowledge graph.
++Loads all adapters and writes nodes/edges through BioCypher.
++"""
+ 
+-# 1. Instantiate Adapter
+-adapter = LianaAdapter()
++import biocypher
++from biocypher._logger import logger
+ 
+-# 2. Instantiate BioCypher Driver
+-# This reads the schema_config.yaml and biocypher_config.yaml automatically
++# ============================================================
++# 1. Instantiate BioCypher Driver
++# ============================================================
+ driver = biocypher.BioCypher()
+ 
+-# 3. Run the driver with the adapter generators
+-driver.write_nodes(adapter.get_nodes())
+-driver.write_edges(adapter.get_edges())
++# ============================================================
++# 2. Define adapters to load (in order of ontology dependency)
++# ============================================================
++adapters = []
++
++# --- LIANA (Ligand-Receptor Interactions) ---
++try:
++    from template_package.adapters.liana_adapter import LianaAdapter
++    adapters.append(("LIANA", LianaAdapter()))
++    logger.info("Loaded LIANA adapter")
++except Exception as e:
++    logger.warning(f"Could not load LIANA adapter: {e}")
++
++# --- ChEBI (Chemical Entities) ---
++# Foundational: provides chemical vocabulary for other databases
++try:
++    from template_package.adapters.chebi_adapter import ChEBIAdapter
++    adapters.append(("ChEBI", ChEBIAdapter()))
++    logger.info("Loaded ChEBI adapter")
++except Exception as e:
++    logger.warning(f"Could not load ChEBI adapter: {e}")
++
++# --- Rhea (Biochemical Reactions) ---
++# Depends on ChEBI for substrate/product linking
++try:
++    from template_package.adapters.rhea_adapter import RheaAdapter
++    adapters.append(("Rhea", RheaAdapter()))
++    logger.info("Loaded Rhea adapter")
++except Exception as e:
++    logger.warning(f"Could not load Rhea adapter: {e}")
++
++# --- LIPID MAPS (Lipid Structures) ---
++# Cross-references to ChEBI
++try:
++    from template_package.adapters.lipidmaps_adapter import LIPIDMAPSAdapter
++    adapters.append(("LIPIDMAPS", LIPIDMAPSAdapter()))
++    logger.info("Loaded LIPIDMAPS adapter")
++except Exception as e:
++    logger.warning(f"Could not load LIPIDMAPS adapter: {e}")
++
++# --- KEGG (Pathways, Reactions, Compounds) ---
++# Cross-references to ChEBI
++try:
++    from template_package.adapters.kegg_adapter import KEGGAdapter
++    adapters.append(("KEGG", KEGGAdapter()))
++    logger.info("Loaded KEGG adapter")
++except Exception as e:
++    logger.warning(f"Could not load KEGG adapter: {e}")
++
++# ============================================================
++# 3. Write nodes and edges from all adapters
++# ============================================================
++logger.info(f"Processing {len(adapters)} adapters...")
++
++for name, adapter in adapters:
++    logger.info(f"--- Writing nodes from {name} ---")
++    driver.write_nodes(adapter.get_nodes())
++    logger.info(f"--- Writing edges from {name} ---")
++    driver.write_edges(adapter.get_edges())
++    logger.info(f"--- Completed {name} ---")
++
++# ============================================================
++# 4. Generate import call script
++# ============================================================
+ driver.write_import_call()
+ 
+-# 5. Output Summary
+-logger.info(
+-    "Import complete. Check the 'biocypher-out' directory for CSVs and import scripts."
+-)
+\ No newline at end of file
++# ============================================================
++# 5. Summary
++# ============================================================
++logger.info("=" * 60)
++logger.info("Import complete!")
++logger.info(f"Processed {len(adapters)} adapters: {', '.join(n for n, _ in adapters)}")
++logger.info("Check the 'biocypher-out' directory for CSVs and import scripts.")
++logger.info("=" * 60)
+diff --git a/memory.md b/memory.md
+new file mode 100644
+index 0000000..650c1fe
+--- /dev/null
++++ b/memory.md
+@@ -0,0 +1,40 @@
++# Memory - Persistent Learnings
++
++## Architecture
++- BioCypher 0.10.1 framework with Neo4j 4.4 backend
++- Adapters yield tuples: Nodes (id, label, props), Edges (id, source, target, label, props)
++- Schema defined in config/schema_config.yaml using BioLink ontology (sentence case)
++- Pipeline: adapters → BioCypher CSV → Neo4j import
++- "Gene" = unified entity for gene+protein, preferred_id=uniprot
++- Human-centric: mouse data projected via orthology mapping
++
++## Data Available (Downloaded)
++- **ChEBI**: compounds.tsv.gz, names.tsv.gz, relation.tsv.gz, database_accession.tsv.gz, chemical_data.tsv.gz, structures.tsv.gz, chebi_lite.obo (~62K compounds)
++- **Rhea**: rhea-directions.tsv (18,343 master rxns), rhea2ec.tsv, rhea2xrefs.tsv, rhea-reaction-smiles.tsv, chebiId_name.tsv, rhea.rdf.gz
++- **LIPIDMAPS**: structures_extended.sdf (49,718 lipids), lipidmaps_ids.tsv, LMSD_rdf.ttl
++- **KEGG**: lists/ (pathway, reaction, compound, module), xrefs/ (compound_to_chebi, compound_to_pubchem), entries/ (compound, pathway, reaction)
++- **LIANA**: Already has working adapter (liana_adapter.py)
++
++## Key Design Decisions
++- ChEBI uses chebi_accession as ID (CHEBI:12345)
++- Rhea reactions modeled as NODES (not edges) with 4 directional variants per master
++- LIPIDMAPS lipids are subclass of chemical_substance
++- KEGG compounds, reactions, pathways each get their own node types
++- Cross-references stored as JSON string properties
++- Sanitize quotes in string fields for CSV safety
++
++## Learnings
++- BioCypher handles deduplication automatically when id=None
++- Properties not in schema_config are silently ignored
++- str[] type for array properties, separated by pipe in CSV
++- Use `is_a` in schema to create custom ontology branches
++- Docker pipeline: build → import → deploy (scripts/build.sh, scripts/import.sh)
++- IMPORTANT: Sanitize quotes in string data (replace " with "")
++
++## Approach
++- Build adapters sequentially: ChEBI → Rhea → LIPIDMAPS → KEGG
++- ChEBI provides foundational chemical vocabulary
++- Rhea links chemicals to biochemical reactions
++- LIPIDMAPS extends chemical space with lipids
++- KEGG adds pathways and metabolic context
++- Then expand to additional databases from the task list
+diff --git a/progress.md b/progress.md
+new file mode 100644
+index 0000000..01ff277
+--- /dev/null
++++ b/progress.md
+@@ -0,0 +1,24 @@
++# Progress Log
++
++## Achievements
++
++### Pre-existing (from previous sessions)
++- [x] Repository structure established with BioCypher template
++- [x] LIANA adapter implemented and working (ligand-receptor interactions)
++- [x] ChEBI database downloaded and analyzed (62K compounds)
++- [x] Rhea database downloaded and analyzed (18,343 master reactions)
++- [x] LIPIDMAPS database downloaded and analyzed (49,718 lipids)
++- [x] KEGG database downloaded and analyzed (19,571 compounds, 12,384 reactions, 584 pathways)
++- [x] Mouse-to-human ortholog mapping prepared
++- [x] Docker pipeline configured (build → import → deploy)
++- [x] Analysis reports and adapter quickstart guides created
++
++### Current Session
++- [ ] ChEBI adapter built
++- [ ] Rhea adapter built
++- [ ] LIPIDMAPS adapter built
++- [ ] KEGG adapter built
++- [ ] Schema config updated for all databases
++- [ ] create_knowledge_graph.py updated with all adapters
++- [ ] Pipeline tested end-to-end
++- [ ] Additional databases integrated
+diff --git a/system.md b/system.md
+new file mode 100644
+index 0000000..54729b5
+--- /dev/null
++++ b/system.md
+@@ -0,0 +1,28 @@
++# System Discovery
++
++## Environment
++- OS: Linux 6.8.0-52-generic
++- Python: Available (^3.10 required)
++- Package manager: Poetry (pyproject.toml)
++- Git: Available
++- Docker: Available (docker-compose.yml present)
++
++## Dependencies (current)
++- biocypher==0.10.1
++- pyarrow>=22.0.0
++- python ^3.10
++
++## Key Paths
++- Project root: /workspace
++- Adapters: /workspace/template_package/adapters/
++- Data: /workspace/template_package/data/
++- Config: /workspace/config/
++- Scripts: /workspace/scripts/
++- Main entry: /workspace/create_knowledge_graph.py
++- Schema: /workspace/config/schema_config.yaml
++
++## Available Tools
++- Python with pandas, biocypher, pyarrow
++- Git for version control
++- Docker for deployment pipeline
++- pip/poetry for dependency management
+diff --git a/template_package/adapters/chebi_adapter.py b/template_package/adapters/chebi_adapter.py
+new file mode 100644
+index 0000000..cd4d570
+--- /dev/null
++++ b/template_package/adapters/chebi_adapter.py
+@@ -0,0 +1,265 @@
++"""
++ChEBI (Chemical Entities of Biological Interest) Adapter for BioCypher.
++
++Loads chemical compound data from ChEBI TSV files and generates:
++- ChemicalSubstance nodes (compounds with properties)
++- SubclassOf edges (ontological hierarchy)
++- ChemicalRelation edges (other chemical relationships)
++"""
++
++import gzip
++import json
++import pandas as pd
++from biocypher._logger import logger
++
++
++class ChEBIAdapter:
++    def __init__(self, data_dir="template_package/data/chebi"):
++        self.data_dir = data_dir
++        self.compounds = None
++        self.chemical_data = None
++        self.names = None
++        self.relations = None
++        self.db_accessions = None
++        self._load_data()
++
++    def _sanitize(self, text):
++        """Sanitize string for CSV safety."""
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        # Remove control chars
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load all ChEBI TSV files."""
++        logger.info("ChEBI: Loading compounds...")
++        self.compounds = pd.read_csv(
++            f"{self.data_dir}/compounds.tsv.gz",
++            sep='\t', compression='gzip',
++            dtype=str, na_values=['\\N', '']
++        )
++        logger.info(f"ChEBI: Loaded {len(self.compounds)} compounds")
++
++        logger.info("ChEBI: Loading chemical data...")
++        self.chemical_data = pd.read_csv(
++            f"{self.data_dir}/chemical_data.tsv.gz",
++            sep='\t', compression='gzip',
++            dtype=str, na_values=['\\N', '']
++        )
++        logger.info(f"ChEBI: Loaded {len(self.chemical_data)} chemical data records")
++
++        logger.info("ChEBI: Loading names...")
++        self.names = pd.read_csv(
++            f"{self.data_dir}/names.tsv.gz",
++            sep='\t', compression='gzip',
++            dtype=str, na_values=['\\N', '']
++        )
++        logger.info(f"ChEBI: Loaded {len(self.names)} name records")
++
++        logger.info("ChEBI: Loading database accessions...")
++        self.db_accessions = pd.read_csv(
++            f"{self.data_dir}/database_accession.tsv.gz",
++            sep='\t', compression='gzip',
++            dtype=str, na_values=['\\N', '']
++        )
++        logger.info(f"ChEBI: Loaded {len(self.db_accessions)} accession records")
++
++        logger.info("ChEBI: Loading relations...")
++        self.relations = pd.read_csv(
++            f"{self.data_dir}/relation.tsv.gz",
++            sep='\t', compression='gzip',
++            dtype=str, na_values=['\\N', '']
++        )
++        logger.info(f"ChEBI: Loaded {len(self.relations)} relations")
++
++        # Build lookup indices
++        self._build_indices()
++
++    def _build_indices(self):
++        """Build lookup dictionaries for efficient property assembly."""
++        # Map internal compound_id -> chebi_accession
++        self.id_to_chebi = {}
++        for _, row in self.compounds.iterrows():
++            if pd.notna(row.get('id')) and pd.notna(row.get('chebi_accession')):
++                self.id_to_chebi[str(row['id'])] = str(row['chebi_accession'])
++
++        # Chemical data by compound_id
++        self.chem_by_compound = {}
++        for _, row in self.chemical_data.iterrows():
++            cid = str(row.get('compound_id', ''))
++            if cid:
++                self.chem_by_compound[cid] = {
++                    'formula': row.get('formula'),
++                    'charge': row.get('charge'),
++                    'mass': row.get('mass'),
++                    'monoisotopic_mass': row.get('monoisotopic_mass'),
++                }
++
++        # Names by compound_id (collect synonyms)
++        self.names_by_compound = {}
++        for _, row in self.names.iterrows():
++            cid = str(row.get('compound_id', ''))
++            if cid and pd.notna(row.get('name')):
++                if cid not in self.names_by_compound:
++                    self.names_by_compound[cid] = []
++                self.names_by_compound[cid].append(self._sanitize(str(row['name'])))
++
++        # DB accessions by compound_id
++        self.xrefs_by_compound = {}
++        for _, row in self.db_accessions.iterrows():
++            cid = str(row.get('compound_id', ''))
++            if cid and pd.notna(row.get('accession_number')):
++                if cid not in self.xrefs_by_compound:
++                    self.xrefs_by_compound[cid] = {}
++                db_type = str(row.get('type', 'UNKNOWN'))
++                acc = str(row['accession_number'])
++                if db_type not in self.xrefs_by_compound[cid]:
++                    self.xrefs_by_compound[cid][db_type] = []
++                self.xrefs_by_compound[cid][db_type].append(acc)
++
++        logger.info(f"ChEBI: Built indices - {len(self.id_to_chebi)} compounds, "
++                     f"{len(self.chem_by_compound)} chemical data, "
++                     f"{len(self.names_by_compound)} name sets, "
++                     f"{len(self.xrefs_by_compound)} xref sets")
++
++    def get_nodes(self):
++        """
++        Generate ChemicalSubstance nodes from ChEBI compounds.
++        Yields: (id, label, properties)
++        """
++        logger.info("ChEBI: Generating nodes...")
++        node_count = 0
++        skipped = 0
++
++        for _, row in self.compounds.iterrows():
++            # Get ChEBI accession as the node ID
++            chebi_acc = row.get('chebi_accession')
++            if pd.isna(chebi_acc):
++                skipped += 1
++                continue
++
++            chebi_acc = str(chebi_acc)
++            internal_id = str(row.get('id', ''))
++            status = str(row.get('status_id', ''))
++
++            # Skip obsolete/merged entries (status_id=1 is active/checked)
++            # status_id: 1=active, 2=checked, 3=submitted, etc.
++            # Keep all entries that have a chebi_accession
++
++            # Build properties
++            name = self._sanitize(row.get('name', ''))
++            definition = self._sanitize(row.get('definition', ''))
++            stars = row.get('stars')
++
++            # Add chemical data if available
++            chem = self.chem_by_compound.get(internal_id, {})
++            formula = self._sanitize(chem.get('formula', ''))
++            charge_str = chem.get('charge')
++            mass_str = chem.get('mass')
++
++            charge = None
++            if charge_str and pd.notna(charge_str):
++                try:
++                    charge = int(float(charge_str))
++                except (ValueError, TypeError):
++                    charge = None
++
++            mass = None
++            if mass_str and pd.notna(mass_str):
++                try:
++                    mass = float(mass_str)
++                except (ValueError, TypeError):
++                    mass = None
++
++            stars_int = None
++            if stars and pd.notna(stars):
++                try:
++                    stars_int = int(float(stars))
++                except (ValueError, TypeError):
++                    stars_int = None
++
++            # Collect synonyms
++            synonyms = self.names_by_compound.get(internal_id, [])
++
++            # Collect cross-references as JSON string
++            xrefs = self.xrefs_by_compound.get(internal_id, {})
++            xrefs_json = json.dumps(xrefs) if xrefs else ""
++
++            props = {
++                'name': name,
++                'definition': definition,
++                'formula': formula,
++                'charge': charge,
++                'mass': mass,
++                'stars': stars_int,
++                'synonyms': synonyms,
++                'xrefs': xrefs_json,
++            }
++
++            yield (chebi_acc, "ChemicalSubstance", props)
++            node_count += 1
++
++        logger.info(f"ChEBI: Generated {node_count} ChemicalSubstance nodes (skipped {skipped})")
++
++    def get_edges(self):
++        """
++        Generate edges from ChEBI relations.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("ChEBI: Generating edges...")
++        subclass_count = 0
++        relation_count = 0
++        skipped = 0
++
++        for _, row in self.relations.iterrows():
++            init_id = str(row.get('init_id', ''))
++            final_id = str(row.get('final_id', ''))
++            rel_type = str(row.get('relation_type_id', ''))
++
++            # Map internal IDs to ChEBI accessions
++            source_chebi = self.id_to_chebi.get(init_id)
++            target_chebi = self.id_to_chebi.get(final_id)
++
++            if not source_chebi or not target_chebi:
++                skipped += 1
++                continue
++
++            # Type 5 = "is_a" (subclass)
++            if rel_type == '5':
++                yield (
++                    None,
++                    source_chebi,
++                    target_chebi,
++                    "SubclassOf",
++                    {}
++                )
++                subclass_count += 1
++            else:
++                # Map relation type IDs to names
++                rel_names = {
++                    '1': 'is_conjugate_acid_of',
++                    '2': 'is_conjugate_base_of',
++                    '3': 'is_tautomer_of',
++                    '4': 'is_enantiomer_of',
++                    '6': 'has_part',
++                    '7': 'has_role',
++                    '8': 'has_parent_hydride',
++                    '9': 'is_substituent_group_from',
++                    '10': 'has_functional_parent',
++                }
++                rel_name = rel_names.get(rel_type, f'relation_{rel_type}')
++
++                yield (
++                    None,
++                    source_chebi,
++                    target_chebi,
++                    "ChemicalRelation",
++                    {'relation_type': rel_name}
++                )
++                relation_count += 1
++
++        logger.info(f"ChEBI: Generated {subclass_count} SubclassOf edges, "
++                     f"{relation_count} ChemicalRelation edges (skipped {skipped})")
+diff --git a/template_package/adapters/kegg_adapter.py b/template_package/adapters/kegg_adapter.py
+new file mode 100644
+index 0000000..ea5056a
+--- /dev/null
++++ b/template_package/adapters/kegg_adapter.py
+@@ -0,0 +1,368 @@
++"""
++KEGG (Kyoto Encyclopedia of Genes and Genomes) Adapter for BioCypher.
++
++Loads KEGG data from downloaded TSV/text files and generates:
++- KEGGCompound nodes (metabolites)
++- KEGGReaction nodes (metabolic reactions)
++- KEGGPathway nodes (metabolic pathways)
++- CompoundParticipatesInReaction edges
++- ReactionInPathway edges
++- KEGGCrossRef edges (KEGG compound → ChEBI)
++"""
++
++import json
++import re
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class KEGGAdapter:
++    def __init__(self, data_dir="template_package/data/kegg"):
++        self.data_dir = data_dir
++        self.compounds = {}
++        self.reactions = {}
++        self.pathways = {}
++        self.compound_to_chebi = {}
++        self.compound_to_pubchem = {}
++        self._load_data()
++
++    def _sanitize(self, text):
++        """Sanitize string for CSV safety."""
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load all KEGG data files."""
++        self._load_lists()
++        self._load_xrefs()
++        self._load_entries()
++
++    def _load_lists(self):
++        """Load KEGG list files (compounds, reactions, pathways)."""
++        # Compounds
++        logger.info("KEGG: Loading compound list...")
++        comp_path = f"{self.data_dir}/lists/compound_list.tsv"
++        if Path(comp_path).exists():
++            with open(comp_path, 'r') as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++                    parts = line.split('\t', 1)
++                    if len(parts) >= 2:
++                        cid = parts[0].strip()
++                        names_str = parts[1].strip()
++                        # First name before semicolons is the primary name
++                        names = [n.strip() for n in names_str.split(';')]
++                        self.compounds[cid] = {
++                            'name': self._sanitize(names[0]) if names else '',
++                            'synonyms': [self._sanitize(n) for n in names[1:] if n.strip()],
++                        }
++        logger.info(f"KEGG: Loaded {len(self.compounds)} compounds")
++
++        # Reactions
++        logger.info("KEGG: Loading reaction list...")
++        rxn_path = f"{self.data_dir}/lists/reaction_list.tsv"
++        if Path(rxn_path).exists():
++            with open(rxn_path, 'r') as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++                    parts = line.split('\t', 1)
++                    if len(parts) >= 2:
++                        rid = parts[0].strip()
++                        desc = parts[1].strip()
++                        # Split on semicolons - first part is enzyme name, second is equation
++                        desc_parts = desc.split(';', 1)
++                        enzyme_name = self._sanitize(desc_parts[0].strip()) if desc_parts else ''
++                        equation = self._sanitize(desc_parts[1].strip()) if len(desc_parts) > 1 else ''
++                        self.reactions[rid] = {
++                            'enzyme_name': enzyme_name,
++                            'equation': equation,
++                        }
++        logger.info(f"KEGG: Loaded {len(self.reactions)} reactions")
++
++        # Pathways
++        logger.info("KEGG: Loading pathway list...")
++        pw_path = f"{self.data_dir}/lists/pathway_list.tsv"
++        if Path(pw_path).exists():
++            with open(pw_path, 'r') as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++                    parts = line.split('\t', 1)
++                    if len(parts) >= 2:
++                        pid = parts[0].strip()
++                        name = self._sanitize(parts[1].strip())
++                        self.pathways[pid] = {
++                            'name': name,
++                        }
++        logger.info(f"KEGG: Loaded {len(self.pathways)} pathways")
++
++    def _load_xrefs(self):
++        """Load cross-reference files."""
++        # Compound to ChEBI
++        chebi_path = f"{self.data_dir}/xrefs/compound_to_chebi.tsv"
++        if Path(chebi_path).exists():
++            with open(chebi_path, 'r') as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++                    parts = line.split('\t')
++                    if len(parts) >= 2:
++                        # cpd:C00001 -> chebi:15377
++                        kegg_id = parts[0].replace('cpd:', '')
++                        chebi_id = parts[1].replace('chebi:', 'CHEBI:')
++                        self.compound_to_chebi[kegg_id] = chebi_id
++        logger.info(f"KEGG: Loaded {len(self.compound_to_chebi)} compound-ChEBI mappings")
++
++        # Compound to PubChem
++        pubchem_path = f"{self.data_dir}/xrefs/compound_to_pubchem.tsv"
++        if Path(pubchem_path).exists():
++            with open(pubchem_path, 'r') as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++                    parts = line.split('\t')
++                    if len(parts) >= 2:
++                        kegg_id = parts[0].replace('cpd:', '')
++                        pubchem_id = parts[1].replace('pubchem:', '')
++                        self.compound_to_pubchem[kegg_id] = pubchem_id
++        logger.info(f"KEGG: Loaded {len(self.compound_to_pubchem)} compound-PubChem mappings")
++
++    def _load_entries(self):
++        """Load detailed KEGG entry data from batch files."""
++        # Parse compound entries
++        compound_dir = Path(f"{self.data_dir}/entries/compound")
++        if compound_dir.exists():
++            logger.info("KEGG: Loading compound entries...")
++            for batch_file in sorted(compound_dir.glob("batch_*.txt")):
++                self._parse_kegg_flat_file(batch_file, 'compound')
++
++        # Parse reaction entries
++        reaction_dir = Path(f"{self.data_dir}/entries/reaction")
++        if reaction_dir.exists():
++            logger.info("KEGG: Loading reaction entries...")
++            for batch_file in sorted(reaction_dir.glob("batch_*.txt")):
++                self._parse_kegg_flat_file(batch_file, 'reaction')
++
++        # Parse pathway entries
++        pathway_dir = Path(f"{self.data_dir}/entries/pathway")
++        if pathway_dir.exists():
++            logger.info("KEGG: Loading pathway entries...")
++            for batch_file in sorted(pathway_dir.glob("batch_*.txt")):
++                self._parse_kegg_flat_file(batch_file, 'pathway')
++
++    def _parse_kegg_flat_file(self, filepath, entry_type):
++        """Parse a KEGG flat file format and merge data into existing records."""
++        current_id = None
++        current_field = None
++        current_data = {}
++
++        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
++            for line in f:
++                line = line.rstrip('\n')
++
++                # End of entry
++                if line.startswith('///'):
++                    if current_id and current_data:
++                        self._merge_entry(current_id, current_data, entry_type)
++                    current_id = None
++                    current_field = None
++                    current_data = {}
++                    continue
++
++                # Field header (12-char fixed width)
++                if line and not line[0].isspace() and len(line) > 12:
++                    field_name = line[:12].strip()
++                    value = line[12:].strip()
++
++                    if field_name == 'ENTRY':
++                        # Extract ID from entry line
++                        parts = value.split()
++                        current_id = parts[0] if parts else None
++                        current_field = 'ENTRY'
++                    elif field_name:
++                        current_field = field_name
++                        if current_field not in current_data:
++                            current_data[current_field] = value
++                        else:
++                            current_data[current_field] += ' ' + value
++                elif line.startswith(' ' * 12) and current_field:
++                    # Continuation line
++                    value = line[12:].strip()
++                    if current_field in current_data:
++                        current_data[current_field] += ' ' + value
++                    else:
++                        current_data[current_field] = value
++                elif line.startswith('  ') and current_field:
++                    # Alternative continuation format
++                    value = line.strip()
++                    if current_field in current_data:
++                        current_data[current_field] += ' ' + value
++                    else:
++                        current_data[current_field] = value
++
++        # Handle last entry in file
++        if current_id and current_data:
++            self._merge_entry(current_id, current_data, entry_type)
++
++    def _merge_entry(self, entry_id, data, entry_type):
++        """Merge parsed entry data into existing records."""
++        if entry_type == 'compound':
++            if entry_id in self.compounds:
++                # Add formula, mass, etc.
++                if 'FORMULA' in data:
++                    self.compounds[entry_id]['formula'] = self._sanitize(data['FORMULA'])
++                if 'EXACT_MASS' in data:
++                    try:
++                        self.compounds[entry_id]['mass'] = float(data['EXACT_MASS'])
++                    except (ValueError, TypeError):
++                        pass
++                if 'MOL_WEIGHT' in data:
++                    try:
++                        self.compounds[entry_id]['mol_weight'] = float(data['MOL_WEIGHT'])
++                    except (ValueError, TypeError):
++                        pass
++                if 'REACTION' in data:
++                    rxn_ids = data['REACTION'].split()
++                    self.compounds[entry_id]['reactions'] = [r for r in rxn_ids if r.startswith('R')]
++                if 'PATHWAY' in data:
++                    # Parse pathway references
++                    pathways = re.findall(r'(map\d+)', data.get('PATHWAY', ''))
++                    self.compounds[entry_id]['pathways'] = pathways
++
++        elif entry_type == 'reaction':
++            if entry_id in self.reactions:
++                if 'EQUATION' in data:
++                    self.reactions[entry_id]['equation'] = self._sanitize(data['EQUATION'])
++                if 'ENZYME' in data:
++                    enzymes = data['ENZYME'].split()
++                    self.reactions[entry_id]['ec_numbers'] = enzymes
++                if 'PATHWAY' in data:
++                    pathways = re.findall(r'(rn\d+|map\d+)', data.get('PATHWAY', ''))
++                    self.reactions[entry_id]['pathways'] = pathways
++                # Extract compound participants from equation
++                if 'EQUATION' in data:
++                    compounds = re.findall(r'(C\d{5})', data['EQUATION'])
++                    self.reactions[entry_id]['compounds'] = compounds
++
++        elif entry_type == 'pathway':
++            if entry_id in self.pathways:
++                if 'DESCRIPTION' in data:
++                    self.pathways[entry_id]['description'] = self._sanitize(data['DESCRIPTION'])
++                if 'CLASS' in data:
++                    self.pathways[entry_id]['pathway_class'] = self._sanitize(data['CLASS'])
++
++    def get_nodes(self):
++        """
++        Generate KEGG compound, reaction, and pathway nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("KEGG: Generating nodes...")
++        comp_count = 0
++        rxn_count = 0
++        pw_count = 0
++
++        # Compound nodes
++        for cid, data in self.compounds.items():
++            xrefs = {}
++            if cid in self.compound_to_chebi:
++                xrefs['CHEBI'] = self.compound_to_chebi[cid]
++            if cid in self.compound_to_pubchem:
++                xrefs['PUBCHEM'] = self.compound_to_pubchem[cid]
++
++            props = {
++                'name': data.get('name', ''),
++                'synonyms': data.get('synonyms', []),
++                'formula': data.get('formula', ''),
++                'mass': data.get('mass'),
++                'xrefs': json.dumps(xrefs) if xrefs else '',
++                'source': 'KEGG',
++            }
++            yield (f"KEGG:{cid}", "KEGGCompound", props)
++            comp_count += 1
++
++        # Reaction nodes
++        for rid, data in self.reactions.items():
++            props = {
++                'enzyme_name': data.get('enzyme_name', ''),
++                'equation': data.get('equation', ''),
++                'ec_numbers': data.get('ec_numbers', []),
++                'source': 'KEGG',
++            }
++            yield (f"KEGG:{rid}", "KEGGReaction", props)
++            rxn_count += 1
++
++        # Pathway nodes
++        for pid, data in self.pathways.items():
++            props = {
++                'name': data.get('name', ''),
++                'description': data.get('description', ''),
++                'pathway_class': data.get('pathway_class', ''),
++                'source': 'KEGG',
++            }
++            yield (f"KEGG:{pid}", "KEGGPathway", props)
++            pw_count += 1
++
++        logger.info(f"KEGG: Generated {comp_count} compound, {rxn_count} reaction, "
++                     f"{pw_count} pathway nodes")
++
++    def get_edges(self):
++        """
++        Generate KEGG relationship edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("KEGG: Generating edges...")
++        comp_rxn_count = 0
++        rxn_pw_count = 0
++        xref_count = 0
++
++        # Compound → Reaction participation edges (from reaction equations)
++        for rid, data in self.reactions.items():
++            for cid in data.get('compounds', []):
++                if cid in self.compounds:
++                    yield (
++                        None,
++                        f"KEGG:{cid}",
++                        f"KEGG:{rid}",
++                        "CompoundParticipatesInReaction",
++                        {}
++                    )
++                    comp_rxn_count += 1
++
++        # Reaction → Pathway edges
++        for rid, data in self.reactions.items():
++            for pid in data.get('pathways', []):
++                if pid in self.pathways:
++                    yield (
++                        None,
++                        f"KEGG:{rid}",
++                        f"KEGG:{pid}",
++                        "ReactionInPathway",
++                        {}
++                    )
++                    rxn_pw_count += 1
++
++        # KEGG compound → ChEBI cross-reference edges
++        for cid, chebi_id in self.compound_to_chebi.items():
++            if cid in self.compounds:
++                yield (
++                    None,
++                    f"KEGG:{cid}",
++                    chebi_id,
++                    "EquivalentTo",
++                    {'source': 'KEGG'}
++                )
++                xref_count += 1
++
++        logger.info(f"KEGG: Generated {comp_rxn_count} CompoundParticipatesInReaction, "
++                     f"{rxn_pw_count} ReactionInPathway, {xref_count} EquivalentTo edges")
+diff --git a/template_package/adapters/lipidmaps_adapter.py b/template_package/adapters/lipidmaps_adapter.py
+new file mode 100644
+index 0000000..0c4691b
+--- /dev/null
++++ b/template_package/adapters/lipidmaps_adapter.py
+@@ -0,0 +1,273 @@
++"""
++LIPID MAPS Structure Database Adapter for BioCypher.
++
++Loads lipid structure data from LIPIDMAPS SDF files and generates:
++- Lipid nodes (chemical structures with classification)
++- LipidCategory nodes (hierarchical classification)
++- LipidClassifiedAs edges (lipid → category)
++- EquivalentTo edges (lipid → ChEBI compound)
++"""
++
++import re
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class LIPIDMAPSAdapter:
++    def __init__(self, data_dir="template_package/data/lipidmaps"):
++        self.data_dir = data_dir
++        self.lipids = {}
++        self.categories = {}
++        self._load_data()
++
++    def _sanitize(self, text):
++        """Sanitize string for CSV safety."""
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _clean_value(self, val):
++        """Clean a value: return empty string for missing/dash values."""
++        if val is None or val == '-' or val == '':
++            return ''
++        return self._sanitize(val)
++
++    def _load_data(self):
++        """Load LIPIDMAPS SDF file."""
++        sdf_path = f"{self.data_dir}/structures_extended.sdf"
++        if not Path(sdf_path).exists():
++            sdf_path = f"{self.data_dir}/structures.sdf"
++
++        logger.info(f"LIPIDMAPS: Parsing SDF file: {sdf_path}")
++        self.lipids = self._parse_sdf(sdf_path)
++        logger.info(f"LIPIDMAPS: Loaded {len(self.lipids)} lipids")
++
++        # Build category hierarchy
++        self._build_categories()
++
++    def _parse_sdf(self, filepath):
++        """Parse SDF file and extract metadata fields."""
++        records = {}
++        current_record = {}
++        current_field = None
++        in_structure = True
++        lm_id = None
++        line_num = 0
++
++        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
++            for line in f:
++                line = line.rstrip('\n')
++                line_num += 1
++
++                if line == '$$$$':
++                    # End of record
++                    if lm_id and current_record:
++                        records[lm_id] = current_record
++                    current_record = {}
++                    current_field = None
++                    in_structure = True
++                    lm_id = None
++
++                    # Log progress every 10000 records
++                    if len(records) % 10000 == 0 and len(records) > 0:
++                        logger.info(f"LIPIDMAPS: Parsed {len(records)} records...")
++                    continue
++
++                # First line of a record is the molecule name (ID)
++                if in_structure and lm_id is None and line.strip():
++                    lm_id = line.strip()
++
++                # Check if we're past the structure block (field header)
++                if line.startswith('> <'):
++                    in_structure = False
++                    # Extract field name from "> <FIELD_NAME>"
++                    current_field = line[3:]
++                    if current_field.endswith('>'):
++                        current_field = current_field[:-1]
++                    current_record[current_field] = None
++                    continue
++
++                if in_structure:
++                    continue
++
++                # Parse field values
++                if current_field is not None and line:
++                    if current_record[current_field] is None:
++                        current_record[current_field] = line
++                    else:
++                        current_record[current_field] += '\n' + line
++
++        # Capture the last record
++        if lm_id and current_record:
++            records[lm_id] = current_record
++
++        return records
++
++    def _extract_category_code(self, category_str):
++        """Extract category code from string like 'Fatty Acyls [FA]'."""
++        if not category_str:
++            return None
++        match = re.search(r'\[([^\]]+)\]', category_str)
++        if match:
++            return match.group(1)
++        return category_str
++
++    def _build_categories(self):
++        """Build category hierarchy from lipid data."""
++        logger.info("LIPIDMAPS: Building category hierarchy...")
++        categories = {}
++
++        for lm_id, data in self.lipids.items():
++            # Process each classification level
++            levels = [
++                ('CATEGORY', 'category'),
++                ('MAIN_CLASS', 'main_class'),
++                ('SUB_CLASS', 'sub_class'),
++                ('CLASS_LEVEL4', 'level4'),
++            ]
++
++            for field, level_name in levels:
++                val = data.get(field, '')
++                if val and val != '-':
++                    code = self._extract_category_code(val)
++                    if code and code not in categories:
++                        categories[code] = {
++                            'code': code,
++                            'name': self._sanitize(val),
++                            'level': level_name,
++                        }
++
++        self.categories = categories
++        logger.info(f"LIPIDMAPS: Built {len(self.categories)} category nodes")
++
++    def _build_lipid_properties(self, data):
++        """Build node properties from SDF record data."""
++        props = {
++            'name': self._clean_value(data.get('COMMON_NAME')),
++            'systematic_name': self._clean_value(data.get('SYSTEMATIC_NAME')),
++            'abbreviation': self._clean_value(data.get('ABBREVIATION')),
++            'formula': self._clean_value(data.get('FORMULA')),
++            'inchi': self._clean_value(data.get('INCHI')),
++            'inchi_key': self._clean_value(data.get('INCHI_KEY')),
++            'smiles': self._clean_value(data.get('SMILES')),
++            'category': self._clean_value(data.get('CATEGORY')),
++            'main_class': self._clean_value(data.get('MAIN_CLASS')),
++            'sub_class': self._clean_value(data.get('SUB_CLASS')),
++            'class_level4': self._clean_value(data.get('CLASS_LEVEL4')),
++            'source': 'LIPIDMAPS',
++        }
++
++        # Mass
++        mass_str = data.get('EXACT_MASS')
++        if mass_str and mass_str != '-':
++            try:
++                props['mass'] = float(mass_str)
++            except (ValueError, TypeError):
++                props['mass'] = None
++        else:
++            props['mass'] = None
++
++        # Synonyms
++        synonyms = []
++        syn_val = data.get('SYNONYMS', '')
++        if syn_val and syn_val != '-':
++            synonyms = [self._sanitize(s.strip()) for s in syn_val.split(';') if s.strip() and s.strip() != '-']
++        props['synonyms'] = synonyms
++
++        # Cross-references as JSON
++        xrefs = {}
++        xref_fields = [
++            ('PUBCHEM_CID', 'PUBCHEM'),
++            ('CHEBI_ID', 'CHEBI'),
++            ('KEGG_ID', 'KEGG'),
++            ('HMDB_ID', 'HMDB'),
++            ('LIPIDBANK_ID', 'LIPIDBANK'),
++            ('SWISSLIPIDS_ID', 'SWISSLIPIDS'),
++            ('CAYMAN_ID', 'CAYMAN'),
++        ]
++        for field, key in xref_fields:
++            val = data.get(field, '')
++            if val and val != '-':
++                xrefs[key] = val
++        props['xrefs'] = json.dumps(xrefs) if xrefs else ""
++
++        return props
++
++    def get_nodes(self):
++        """
++        Generate Lipid and LipidCategory nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("LIPIDMAPS: Generating nodes...")
++        lipid_count = 0
++        cat_count = 0
++
++        # Generate Lipid nodes
++        for lm_id, data in self.lipids.items():
++            props = self._build_lipid_properties(data)
++            yield (lm_id, "Lipid", props)
++            lipid_count += 1
++
++        # Generate LipidCategory nodes
++        for cat_code, cat_data in self.categories.items():
++            yield (cat_code, "LipidCategory", cat_data)
++            cat_count += 1
++
++        logger.info(f"LIPIDMAPS: Generated {lipid_count} Lipid nodes, {cat_count} LipidCategory nodes")
++
++    def get_edges(self):
++        """
++        Generate classification and equivalence edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("LIPIDMAPS: Generating edges...")
++        classify_count = 0
++        equiv_count = 0
++
++        for lm_id, data in self.lipids.items():
++            # Classification edges
++            levels = [
++                ('CATEGORY', 'category'),
++                ('MAIN_CLASS', 'main_class'),
++                ('SUB_CLASS', 'sub_class'),
++                ('CLASS_LEVEL4', 'level4'),
++            ]
++
++            for field, level_name in levels:
++                val = data.get(field, '')
++                if val and val != '-':
++                    code = self._extract_category_code(val)
++                    if code:
++                        yield (
++                            None,
++                            lm_id,
++                            code,
++                            "LipidClassifiedAs",
++                            {
++                                'classification_level': level_name,
++                                'classification_type': 'primary',
++                            }
++                        )
++                        classify_count += 1
++
++            # ChEBI equivalence edge
++            chebi_id = data.get('CHEBI_ID', '')
++            if chebi_id and chebi_id != '-':
++                # Normalize to CHEBI:XXXXX format
++                if not chebi_id.startswith('CHEBI:'):
++                    chebi_id = f"CHEBI:{chebi_id}"
++                yield (
++                    None,
++                    lm_id,
++                    chebi_id,
++                    "EquivalentTo",
++                    {'source': 'LIPIDMAPS'}
++                )
++                equiv_count += 1
++
++        logger.info(f"LIPIDMAPS: Generated {classify_count} LipidClassifiedAs, "
++                     f"{equiv_count} EquivalentTo edges")
+diff --git a/template_package/adapters/rhea_adapter.py b/template_package/adapters/rhea_adapter.py
+new file mode 100644
+index 0000000..a4c04be
+--- /dev/null
++++ b/template_package/adapters/rhea_adapter.py
+@@ -0,0 +1,286 @@
++"""
++Rhea (Biochemical Reactions) Adapter for BioCypher.
++
++Loads reaction data from Rhea TSV files and generates:
++- BiochemicalReaction nodes (master + directional variants)
++- ReactionVariant edges (variants → master)
++- HasSubstrate/HasProduct edges (reactions → ChEBI compounds) via RDF parsing
++"""
++
++import gzip
++import json
++import pandas as pd
++from biocypher._logger import logger
++
++
++class RheaAdapter:
++    def __init__(self, data_dir="template_package/data/rhea"):
++        self.data_dir = data_dir
++        self.directions = None
++        self.ec_map = {}
++        self.xrefs_map = {}
++        self.smiles_map = {}
++        self.chebi_names = {}
++        self.participants = {}  # reaction_id -> {substrates: [], products: []}
++        self._load_data()
++
++    def _sanitize(self, text):
++        """Sanitize string for CSV safety."""
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load all Rhea TSV files."""
++        # 1. Load directions (master -> LR, RL, BI)
++        logger.info("Rhea: Loading directions...")
++        self.directions = pd.read_csv(
++            f"{self.data_dir}/rhea-directions.tsv",
++            sep='\t', dtype=str
++        )
++        logger.info(f"Rhea: Loaded {len(self.directions)} master reactions")
++
++        # 2. Load EC number mappings
++        logger.info("Rhea: Loading EC mappings...")
++        ec_df = pd.read_csv(
++            f"{self.data_dir}/rhea2ec.tsv",
++            sep='\t', dtype=str
++        )
++        for _, row in ec_df.iterrows():
++            rid = str(row.get('RHEA_ID', ''))
++            ec = str(row.get('ID', ''))
++            if rid and ec:
++                if rid not in self.ec_map:
++                    self.ec_map[rid] = []
++                self.ec_map[rid].append(ec)
++        logger.info(f"Rhea: Loaded EC mappings for {len(self.ec_map)} reactions")
++
++        # 3. Load cross-references
++        logger.info("Rhea: Loading cross-references...")
++        xref_df = pd.read_csv(
++            f"{self.data_dir}/rhea2xrefs.tsv",
++            sep='\t', dtype=str
++        )
++        for _, row in xref_df.iterrows():
++            rid = str(row.get('RHEA_ID', ''))
++            db = str(row.get('DB', ''))
++            xid = str(row.get('ID', ''))
++            if rid and db and xid:
++                if rid not in self.xrefs_map:
++                    self.xrefs_map[rid] = {}
++                if db not in self.xrefs_map[rid]:
++                    self.xrefs_map[rid][db] = []
++                self.xrefs_map[rid][db].append(xid)
++        logger.info(f"Rhea: Loaded xrefs for {len(self.xrefs_map)} reactions")
++
++        # 4. Load SMILES
++        logger.info("Rhea: Loading SMILES...")
++        try:
++            with open(f"{self.data_dir}/rhea-reaction-smiles.tsv", 'r') as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++                    parts = line.split('\t')
++                    if len(parts) >= 2:
++                        self.smiles_map[parts[0]] = parts[1]
++        except FileNotFoundError:
++            logger.warning("Rhea: SMILES file not found, skipping")
++        logger.info(f"Rhea: Loaded {len(self.smiles_map)} SMILES")
++
++        # 5. Load ChEBI participant names
++        logger.info("Rhea: Loading ChEBI names...")
++        try:
++            chebi_df = pd.read_csv(
++                f"{self.data_dir}/chebiId_name.tsv",
++                sep='\t', dtype=str, header=None,
++                names=['chebi_id', 'name']
++            )
++            for _, row in chebi_df.iterrows():
++                cid = str(row.get('chebi_id', ''))
++                name = str(row.get('name', ''))
++                if cid:
++                    self.chebi_names[cid] = name
++        except Exception as e:
++            logger.warning(f"Rhea: Could not load ChEBI names: {e}")
++        logger.info(f"Rhea: Loaded {len(self.chebi_names)} ChEBI participant names")
++
++        # 6. Parse RDF for reaction participants (substrates/products)
++        self._parse_rdf_participants()
++
++    def _parse_rdf_participants(self):
++        """Parse rhea.rdf.gz to extract reaction substrates and products."""
++        logger.info("Rhea: Parsing RDF for reaction participants...")
++        rdf_path = f"{self.data_dir}/rhea.rdf.gz"
++
++        try:
++            import gzip
++            import rdflib
++            g = rdflib.Graph()
++            logger.info("Rhea: Loading RDF graph (decompressing gz first)...")
++            with gzip.open(rdf_path, 'rb') as gz_file:
++                g.parse(gz_file, format='xml')
++            logger.info(f"Rhea: RDF graph loaded with {len(g)} triples")
++
++            # Namespaces
++            RH = rdflib.Namespace("http://rdf.rhea-db.org/")
++            RDFS = rdflib.namespace.RDFS
++
++            # Find all reactions and their sides
++            reaction_sides = {}  # reaction_uri -> {'left': [...], 'right': [...]}
++
++            # Get reaction substrates (left side) and products (right side)
++            for rxn, pred, side in g.triples((None, RH.substrates, None)):
++                rxn_id = str(rxn).split('/')[-1]
++                if rxn_id not in reaction_sides:
++                    reaction_sides[rxn_id] = {'left': [], 'right': []}
++                # Get compounds on this side
++                for _, _, compound in g.triples((side, RH.contains, None)):
++                    # Get the compound reference
++                    for _, _, chebi_ref in g.triples((compound, RH.compound, None)):
++                        chebi_id = str(chebi_ref).split('/')[-1]
++                        if chebi_id.startswith('CHEBI_'):
++                            chebi_id = chebi_id.replace('CHEBI_', 'CHEBI:')
++                        reaction_sides[rxn_id]['left'].append(chebi_id)
++
++            for rxn, pred, side in g.triples((None, RH.products, None)):
++                rxn_id = str(rxn).split('/')[-1]
++                if rxn_id not in reaction_sides:
++                    reaction_sides[rxn_id] = {'left': [], 'right': []}
++                for _, _, compound in g.triples((side, RH.contains, None)):
++                    for _, _, chebi_ref in g.triples((compound, RH.compound, None)):
++                        chebi_id = str(chebi_ref).split('/')[-1]
++                        if chebi_id.startswith('CHEBI_'):
++                            chebi_id = chebi_id.replace('CHEBI_', 'CHEBI:')
++                        reaction_sides[rxn_id]['right'].append(chebi_id)
++
++            self.participants = reaction_sides
++            logger.info(f"Rhea: Extracted participants for {len(reaction_sides)} reactions")
++
++        except ImportError:
++            logger.warning("Rhea: rdflib not available, skipping RDF parsing. "
++                         "Install with: pip install rdflib")
++        except Exception as e:
++            logger.warning(f"Rhea: RDF parsing failed: {e}. "
++                         "Continuing without substrate/product edges.")
++
++    def get_nodes(self):
++        """
++        Generate BiochemicalReaction nodes.
++        Creates 4 nodes per master reaction (UN, LR, RL, BI).
++        Yields: (id, label, properties)
++        """
++        logger.info("Rhea: Generating reaction nodes...")
++        node_count = 0
++
++        for _, row in self.directions.iterrows():
++            master_id = str(row.get('RHEA_ID_MASTER', ''))
++            lr_id = str(row.get('RHEA_ID_LR', ''))
++            rl_id = str(row.get('RHEA_ID_RL', ''))
++            bi_id = str(row.get('RHEA_ID_BI', ''))
++
++            variants = [
++                (master_id, 'UN'),
++                (lr_id, 'LR'),
++                (rl_id, 'RL'),
++                (bi_id, 'BI'),
++            ]
++
++            for rhea_id, direction in variants:
++                if not rhea_id:
++                    continue
++
++                # EC numbers (usually on master/UN)
++                ec_list = self.ec_map.get(rhea_id, [])
++
++                # Cross-references
++                xrefs = self.xrefs_map.get(rhea_id, {})
++
++                # SMILES (only LR and RL)
++                smiles = self._sanitize(self.smiles_map.get(rhea_id, ''))
++
++                # Build equation from participants
++                parts = self.participants.get(rhea_id, {})
++                left_names = [self.chebi_names.get(c, c) for c in parts.get('left', [])]
++                right_names = [self.chebi_names.get(c, c) for c in parts.get('right', [])]
++                equation = ""
++                if left_names and right_names:
++                    equation = self._sanitize(
++                        " + ".join(left_names) + " = " + " + ".join(right_names)
++                    )
++
++                props = {
++                    'rhea_id': f"RHEA:{rhea_id}",
++                    'direction': direction,
++                    'master_id': f"RHEA:{master_id}",
++                    'ec_number': ec_list,
++                    'smiles': smiles,
++                    'equation': equation,
++                    'xrefs': json.dumps(xrefs) if xrefs else "",
++                }
++
++                yield (f"RHEA:{rhea_id}", "BiochemicalReaction", props)
++                node_count += 1
++
++        logger.info(f"Rhea: Generated {node_count} BiochemicalReaction nodes")
++
++    def get_edges(self):
++        """
++        Generate edges:
++        1. ReactionVariant: LR/RL/BI → master (UN)
++        2. HasSubstrate: reaction → ChEBI compound
++        3. HasProduct: reaction → ChEBI compound
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("Rhea: Generating edges...")
++        variant_count = 0
++        substrate_count = 0
++        product_count = 0
++
++        # 1. Variant edges
++        for _, row in self.directions.iterrows():
++            master_id = str(row.get('RHEA_ID_MASTER', ''))
++            lr_id = str(row.get('RHEA_ID_LR', ''))
++            rl_id = str(row.get('RHEA_ID_RL', ''))
++            bi_id = str(row.get('RHEA_ID_BI', ''))
++
++            for variant_id, variant_type in [(lr_id, 'LR'), (rl_id, 'RL'), (bi_id, 'BI')]:
++                if variant_id and master_id:
++                    yield (
++                        None,
++                        f"RHEA:{variant_id}",
++                        f"RHEA:{master_id}",
++                        "ReactionVariant",
++                        {'variant_type': variant_type}
++                    )
++                    variant_count += 1
++
++        # 2. Substrate and product edges (from RDF participants)
++        for rxn_id, sides in self.participants.items():
++            for chebi_id in sides.get('left', []):
++                if chebi_id.startswith('CHEBI:'):
++                    yield (
++                        None,
++                        f"RHEA:{rxn_id}",
++                        chebi_id,
++                        "HasSubstrate",
++                        {}
++                    )
++                    substrate_count += 1
++
++            for chebi_id in sides.get('right', []):
++                if chebi_id.startswith('CHEBI:'):
++                    yield (
++                        None,
++                        f"RHEA:{rxn_id}",
++                        chebi_id,
++                        "HasProduct",
++                        {}
++                    )
++                    product_count += 1
++
++        logger.info(f"Rhea: Generated {variant_count} ReactionVariant, "
++                     f"{substrate_count} HasSubstrate, {product_count} HasProduct edges")
+diff --git a/todo.md b/todo.md
+new file mode 100644
+index 0000000..492a934
+--- /dev/null
++++ b/todo.md
+@@ -0,0 +1,21 @@
++# TODO - Current Work Items
++
++## Immediate (This Session)
++1. [IN PROGRESS] Build ChEBI adapter
++2. [ ] Build Rhea adapter (TSV-based, Phase 1)
++3. [ ] Build LIPIDMAPS adapter (SDF parsing)
++4. [ ] Build KEGG adapter (compounds, reactions, pathways)
++5. [ ] Update schema_config.yaml with all new entity types
++6. [ ] Update create_knowledge_graph.py to use all adapters
++7. [ ] Test pipeline end-to-end
++8. [ ] Commit all changes
++
++## Next Phase
++9. [ ] Download and integrate additional databases from task.md list
++10. [ ] InterPro (protein families/domains)
++11. [ ] IntAct (molecular interactions)
++12. [ ] ComplexPortal (protein complexes)
++13. [ ] Human Protein Atlas (expression, localization)
++14. [ ] STRING (protein-protein interactions)
++15. [ ] Reactome (pathways)
++16. [ ] ENCODE/SCREEN (regulatory elements)

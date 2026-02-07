@@ -1,0 +1,2272 @@
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index b6f9fc2..eac36b2 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -1084,3 +1084,209 @@ connectivity experiment:
+     specimen_id: str
+     section_thickness: str
+     source: str
++
++# ============================================================
++# Translocatome (Protein Translocation)
++# ============================================================
++
++protein translocation:
++  is_a: related to
++  represented_as: edge
++  input_label: ProteinTranslocation
++  properties:
++    gene_name: str
++    confidence: str
++    localizations: str
++    evidence_score: float
++    source: str
++
++# ============================================================
++# 3D Genome Browser (TADs)
++# ============================================================
++
++topological domain:
++  is_a: genomic entity
++  represented_as: node
++  preferred_id: 3dgenome
++  input_label: TopologicalDomain
++  properties:
++    chromosome: str
++    start: int
++    end: int
++    name: str
++    score: int
++    experiment_id: str
++    genome_assembly: str
++    source: str
++
++# ============================================================
++# Adhesome (Cell Adhesion)
++# ============================================================
++
++adhesome interaction:
++  is_a: pairwise molecular interaction
++  represented_as: edge
++  input_label: AdhesomeInteraction
++  properties:
++    interaction_type: str
++    source_db: str
++
++# ============================================================
++# BRENDA (Enzyme Database - extended)
++# Note: Enzyme and EnzymeCatalyzedBy already defined above via ExPASy
++# BRENDA adapter reuses the same schema entries
++# ============================================================
++
++# ============================================================
++# ChapNet (Chaperone Interaction Network)
++# ============================================================
++
++chaperone interaction:
++  is_a: pairwise molecular interaction
++  represented_as: edge
++  input_label: ChaperoneInteraction
++  properties:
++    source_symbol: str
++    target_symbol: str
++    network: str
++    source_db: str
++
++# ============================================================
++# ENCORI / starBase (miRNA-Target Interactions)
++# ============================================================
++
++micro rna:
++  is_a: nucleic acid entity
++  represented_as: node
++  preferred_id: mirbase
++  input_label: MicroRNA
++  properties:
++    name: str
++    source: str
++
++mirna targets gene:
++  is_a: related to
++  represented_as: edge
++  input_label: MiRNATargetsGene
++  properties:
++    gene_name: str
++    clip_experiments: int
++    targetscan: int
++    source: str
++
++# ============================================================
++# EpiMap (Chromatin State Segmentation)
++# ============================================================
++
++chromatin state:
++  is_a: genomic entity
++  represented_as: node
++  preferred_id: epimap
++  input_label: ChromatinState
++  properties:
++    chromosome: str
++    start: int
++    end: int
++    state: str
++    biosample_id: str
++    genome_assembly: str
++    source: str
++
++# ============================================================
++# EVpedia (Extracellular Vesicle)
++# ============================================================
++
++ev origin:
++  is_a: anatomical entity
++  represented_as: node
++  preferred_id: evpedia
++  input_label: EVOrigin
++  properties:
++    name: str
++    category: str
++    cell_type: str
++    source: str
++
++circular rna:
++  is_a: nucleic acid entity
++  represented_as: node
++  preferred_id: evpedia
++  input_label: CircularRNA
++  properties:
++    position: str
++    strand: str
++    gene_symbol: str
++    gene_type: str
++    sample_type: str
++    source: str
++
++# ============================================================
++# LION (Lipid Ontology)
++# ============================================================
++
++lipid ontology term:
++  is_a: ontology class
++  represented_as: node
++  preferred_id: lion
++  input_label: LipidOntologyTerm
++  properties:
++    name: str
++    source: str
++
++lipid has ontology term:
++  is_a: related to
++  represented_as: edge
++  input_label: LipidHasOntologyTerm
++  properties:
++    lipid_name: str
++    source: str
++
++# ============================================================
++# RaftProt (Lipid Raft Proteomics)
++# ============================================================
++
++protein in lipid raft:
++  is_a: related to
++  represented_as: edge
++  input_label: ProteinInLipidRaft
++  properties:
++    gene_name: str
++    method: str
++    detergent: str
++    species: str
++    original_id: str
++    source: str
++
++# ============================================================
++# SILVA (rRNA Taxonomy)
++# ============================================================
++
++taxonomic entity:
++  is_a: organism taxon
++  represented_as: node
++  preferred_id: silva
++  input_label: TaxonomicEntity
++  properties:
++    name: str
++    rank: str
++    full_path: str
++    source: str
++
++taxon child of:
++  is_a: subclass of
++  represented_as: edge
++  input_label: TaxonChildOf
++  properties:
++    source: str
++
++# ============================================================
++# TarBase / miRDB (miRNA Target Predictions)
++# ============================================================
++
++mirna target prediction:
++  is_a: related to
++  represented_as: edge
++  input_label: MiRNATargetPrediction
++  properties:
++    prediction_score: float
++    source: str
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index c7fa994..1ac1384 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -436,6 +436,111 @@ try:
+ except Exception as e:
+     logger.warning(f"Could not load Allen Connectivity adapter: {e}")
+ 
++# --- Translocatome (Protein Translocation) ---
++try:
++    from template_package.adapters.translocatome_adapter import TranslocatomeAdapter
++    adapters.append(("Translocatome", TranslocatomeAdapter()))
++    logger.info("Loaded Translocatome adapter")
++except Exception as e:
++    logger.warning(f"Could not load Translocatome adapter: {e}")
++
++
++# --- 3D Genome Browser (TADs) ---
++try:
++    from template_package.adapters.threed_genome_adapter import ThreeDGenomeAdapter
++    adapters.append(("3DGenome", ThreeDGenomeAdapter()))
++    logger.info("Loaded 3D Genome Browser adapter")
++except Exception as e:
++    logger.warning(f"Could not load 3D Genome Browser adapter: {e}")
++
++# --- Adhesome (Cell Adhesion) ---
++try:
++    from template_package.adapters.adhesome_adapter import AdhesomeAdapter
++    adapters.append(("Adhesome", AdhesomeAdapter()))
++    logger.info("Loaded Adhesome adapter")
++except Exception as e:
++    logger.warning(f"Could not load Adhesome adapter: {e}")
++
++# --- BRENDA (Enzyme Database) ---
++try:
++    from template_package.adapters.brenda_adapter import BRENDAAdapter
++    adapters.append(("BRENDA", BRENDAAdapter()))
++    logger.info("Loaded BRENDA adapter")
++except Exception as e:
++    logger.warning(f"Could not load BRENDA adapter: {e}")
++
++# --- ChapNet (Chaperone Interaction Network) ---
++try:
++    from template_package.adapters.chapnet_adapter import ChapNetAdapter
++    adapters.append(("ChapNet", ChapNetAdapter()))
++    logger.info("Loaded ChapNet adapter")
++except Exception as e:
++    logger.warning(f"Could not load ChapNet adapter: {e}")
++
++# --- ENCORI / starBase (miRNA-Target Interactions) ---
++try:
++    from template_package.adapters.encori_adapter import ENCORIAdapter
++    adapters.append(("ENCORI", ENCORIAdapter()))
++    logger.info("Loaded ENCORI adapter")
++except Exception as e:
++    logger.warning(f"Could not load ENCORI adapter: {e}")
++
++# --- EpiMap (Chromatin State Segmentation) ---
++try:
++    from template_package.adapters.epimap_adapter import EpiMapAdapter
++    adapters.append(("EpiMap", EpiMapAdapter()))
++    logger.info("Loaded EpiMap adapter")
++except Exception as e:
++    logger.warning(f"Could not load EpiMap adapter: {e}")
++
++# --- EVpedia (Extracellular Vesicle) ---
++try:
++    from template_package.adapters.evpedia_adapter import EVpediaAdapter
++    adapters.append(("EVpedia", EVpediaAdapter()))
++    logger.info("Loaded EVpedia adapter")
++except Exception as e:
++    logger.warning(f"Could not load EVpedia adapter: {e}")
++
++# --- LION (Lipid Ontology) ---
++try:
++    from template_package.adapters.lipid_ontology_adapter import LipidOntologyAdapter
++    adapters.append(("LION", LipidOntologyAdapter()))
++    logger.info("Loaded Lipid Ontology (LION) adapter")
++except Exception as e:
++    logger.warning(f"Could not load Lipid Ontology adapter: {e}")
++
++# --- RaftProt (Lipid Raft Proteomics) ---
++try:
++    from template_package.adapters.raftprot_adapter import RaftProtAdapter
++    adapters.append(("RaftProt", RaftProtAdapter()))
++    logger.info("Loaded RaftProt adapter")
++except Exception as e:
++    logger.warning(f"Could not load RaftProt adapter: {e}")
++
++# --- SILVA (rRNA Taxonomy) ---
++try:
++    from template_package.adapters.silva_adapter import SILVAAdapter
++    adapters.append(("SILVA", SILVAAdapter()))
++    logger.info("Loaded SILVA adapter")
++except Exception as e:
++    logger.warning(f"Could not load SILVA adapter: {e}")
++
++# --- TarBase / miRDB (miRNA Target Predictions) ---
++try:
++    from template_package.adapters.tarbase_adapter import TarBaseAdapter
++    adapters.append(("TarBase", TarBaseAdapter()))
++    logger.info("Loaded TarBase/miRDB adapter")
++except Exception as e:
++    logger.warning(f"Could not load TarBase/miRDB adapter: {e}")
++
++# --- UniCarbKB / GlyGen (Glycan Structures) ---
++try:
++    from template_package.adapters.unicarbkb_adapter import UniCarbKBAdapter
++    adapters.append(("UniCarbKB", UniCarbKBAdapter()))
++    logger.info("Loaded UniCarbKB/GlyGen adapter")
++except Exception as e:
++    logger.warning(f"Could not load UniCarbKB/GlyGen adapter: {e}")
++
+ # ============================================================
+ # 3. Write nodes and edges from all adapters
+ # ============================================================
+diff --git a/memory.md b/memory.md
+index 650c1fe..041dffb 100644
+--- a/memory.md
++++ b/memory.md
+@@ -4,16 +4,29 @@
+ - BioCypher 0.10.1 framework with Neo4j 4.4 backend
+ - Adapters yield tuples: Nodes (id, label, props), Edges (id, source, target, label, props)
+ - Schema defined in config/schema_config.yaml using BioLink ontology (sentence case)
+-- Pipeline: adapters → BioCypher CSV → Neo4j import
++- Pipeline: adapters -> BioCypher CSV -> Neo4j import
+ - "Gene" = unified entity for gene+protein, preferred_id=uniprot
+ - Human-centric: mouse data projected via orthology mapping
+ 
+-## Data Available (Downloaded)
+-- **ChEBI**: compounds.tsv.gz, names.tsv.gz, relation.tsv.gz, database_accession.tsv.gz, chemical_data.tsv.gz, structures.tsv.gz, chebi_lite.obo (~62K compounds)
+-- **Rhea**: rhea-directions.tsv (18,343 master rxns), rhea2ec.tsv, rhea2xrefs.tsv, rhea-reaction-smiles.tsv, chebiId_name.tsv, rhea.rdf.gz
+-- **LIPIDMAPS**: structures_extended.sdf (49,718 lipids), lipidmaps_ids.tsv, LMSD_rdf.ttl
+-- **KEGG**: lists/ (pathway, reaction, compound, module), xrefs/ (compound_to_chebi, compound_to_pubchem), entries/ (compound, pathway, reaction)
++## Data Available (Downloaded) - 62 databases
++- **ChEBI**: compounds.tsv.gz, names.tsv.gz, relation.tsv.gz, etc (~62K compounds)
++- **Rhea**: rhea-directions.tsv (18,343 master rxns), rhea2ec.tsv, etc
++- **LIPIDMAPS**: structures_extended.sdf (49,718 lipids), etc
++- **KEGG**: lists/, xrefs/, entries/ (19,571 compounds, 12,384 reactions, 584 pathways)
+ - **LIANA**: Already has working adapter (liana_adapter.py)
++- **3DGenome**: ENCODE TAD BED files (4 experiments)
++- **Adhesome**: components.csv, interactions.csv (download error - 404)
++- **BRENDA**: enzyme.dat (ExPASy format, ~8000 enzymes with human DR cross-refs)
++- **ChapNet**: Cytoscape JSON networks + ChaperoneCorrelation.csv
++- **ENCORI**: miRNA-target TSV files (3 miRNA families, ~7K records)
++- **EpiMap**: Chromatin state BED.gz files (3 biosamples)
++- **EVpedia**: browse_origin.csv, circRNAs_anno.csv, longRNAs_anno.csv
++- **LipidOntology**: LION-terms.csv, all-LION-lipid-associations.csv
++- **RaftProt**: Raftprot.v2.4.txt (1408 entries, space-delimited)
++- **SILVA**: tax_slv_ssu_138.2.txt.gz (rRNA taxonomy)
++- **TarBase/miRDB**: miRDB_v6.0_prediction_result.txt.gz (multi-species)
++- **UniCarbKB**: GlyGen glycan TSV/JSON files (~584 glycans)
++- Plus 46 additional databases with existing adapters
+ 
+ ## Key Design Decisions
+ - ChEBI uses chebi_accession as ID (CHEBI:12345)
+@@ -22,19 +35,25 @@
+ - KEGG compounds, reactions, pathways each get their own node types
+ - Cross-references stored as JSON string properties
+ - Sanitize quotes in string fields for CSV safety
++- miRNA nodes use MicroRNA label (shared by ENCORI + TarBase/miRDB)
++- RaftProt uses mouse-to-human ortholog mapping
++- BRENDA reuses Enzyme/EnzymeCatalyzedBy schema entries (same as ExPASy ENZYME)
++- EpiMap filters for active chromatin states only (skips Quies to reduce size)
++- TarBase/miRDB filters for human miRNAs with score >= 80
+ 
+ ## Learnings
+ - BioCypher handles deduplication automatically when id=None
+ - Properties not in schema_config are silently ignored
+ - str[] type for array properties, separated by pipe in CSV
+ - Use `is_a` in schema to create custom ontology branches
+-- Docker pipeline: build → import → deploy (scripts/build.sh, scripts/import.sh)
++- Docker pipeline: build -> import -> deploy (scripts/build.sh, scripts/import.sh)
+ - IMPORTANT: Sanitize quotes in string data (replace " with "")
++- Adhesome data files contain "404: Not Found" - adapter handles gracefully
++- ENCORI .json files are actually TSV with comment headers
++- RaftProt uses space-delimited quoted fields
+ 
+-## Approach
+-- Build adapters sequentially: ChEBI → Rhea → LIPIDMAPS → KEGG
+-- ChEBI provides foundational chemical vocabulary
+-- Rhea links chemicals to biochemical reactions
+-- LIPIDMAPS extends chemical space with lipids
+-- KEGG adds pathways and metabolic context
+-- Then expand to additional databases from the task list
++## Schema Stats
++- 102 total schema entries
++- 65 adapter entries in create_knowledge_graph.py
++- 62 data directories
++- All data directories now have corresponding adapters
+diff --git a/progress.md b/progress.md
+index 01ff277..22cac44 100644
+--- a/progress.md
++++ b/progress.md
+@@ -10,15 +10,41 @@
+ - [x] LIPIDMAPS database downloaded and analyzed (49,718 lipids)
+ - [x] KEGG database downloaded and analyzed (19,571 compounds, 12,384 reactions, 584 pathways)
+ - [x] Mouse-to-human ortholog mapping prepared
+-- [x] Docker pipeline configured (build → import → deploy)
++- [x] Docker pipeline configured (build -> import -> deploy)
+ - [x] Analysis reports and adapter quickstart guides created
+ 
++### Earlier Iteration
++- [x] ChEBI, Rhea, LIPIDMAPS, KEGG adapters built
++- [x] ComplexPortal, InterPro, STRING, Reactome, HPA adapters
++- [x] IntAct, Compartments, GPCRdb adapters
++- [x] ELM, Cell Ontology, Allen Brain Atlas, Reactome pathway hierarchy
++- [x] NeuroElectro, SynGO, ENCODE SCREEN, BioLiP, TCDB
++- [x] DGIdb, GlyGen, MatrisomeDB, ExoCarta, CPDB
++- [x] MobiDB, iPTMnet, Dfam, REPAIRtoire, ComPPI, FANTOM5
++- [x] Membranome, SLC, HistoneDB, MetalPDB, ChEA3, OpenProt
++- [x] PTMcode, ModelDB, PeptideAtlas, SABIO-RK, PDBe PISA
++- [x] ExPASy ENZYME, PhaSepDB, RNAgranuleDB, Degronopedia
++- [x] FerrDb, PsychENCODE, ArrestinDB, GtRNAdb
++- [x] Allen Connectivity, Translocatome adapters
++
+ ### Current Session
+-- [ ] ChEBI adapter built
+-- [ ] Rhea adapter built
+-- [ ] LIPIDMAPS adapter built
+-- [ ] KEGG adapter built
+-- [ ] Schema config updated for all databases
+-- [ ] create_knowledge_graph.py updated with all adapters
+-- [ ] Pipeline tested end-to-end
+-- [ ] Additional databases integrated
++- [x] 3D Genome Browser adapter (TADs/chromatin conformation)
++- [x] Adhesome adapter (cell adhesion proteins & interactions)
++- [x] BRENDA adapter (comprehensive enzyme database with DR cross-refs)
++- [x] ChapNet adapter (chaperone-protein co-expression networks)
++- [x] ENCORI/starBase adapter (miRNA-target interactions from CLIP-Seq)
++- [x] EpiMap adapter (chromatin state segmentation across biosamples)
++- [x] EVpedia adapter (extracellular vesicle proteomics & circRNAs)
++- [x] LION/Lipid Ontology adapter (lipid biological function ontology)
++- [x] RaftProt adapter (lipid raft proteomics with ortholog mapping)
++- [x] SILVA adapter (rRNA taxonomy hierarchy)
++- [x] TarBase/miRDB adapter (miRNA target predictions)
++- [x] UniCarbKB/GlyGen adapter (glycan structures)
++- [x] Schema config updated for all 12 new databases (102 total entries)
++- [x] create_knowledge_graph.py updated with all 65 adapter entries
++
++## Summary
++- **Total adapters**: 65 (including LIANA + example)
++- **Total schema entries**: 102 node/edge types
++- **Total data directories**: 62
++- **All data directories now have corresponding adapters**
+diff --git a/template_package/adapters/adhesome_adapter.py b/template_package/adapters/adhesome_adapter.py
+new file mode 100644
+index 0000000..44bf123
+--- /dev/null
++++ b/template_package/adapters/adhesome_adapter.py
+@@ -0,0 +1,114 @@
++"""
++Adhesome Adapter for BioCypher.
++
++Loads cell adhesion component and interaction data from Adhesome.org.
++The adhesome is the collection of proteins involved in cell-matrix
++and cell-cell adhesion signaling.
++
++Note: Data files may contain download errors (e.g. "404: Not Found").
++In that case, this adapter gracefully handles empty/invalid data.
++"""
++
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class AdhesomeAdapter:
++    def __init__(self, data_dir="template_package/data/adhesome"):
++        self.data_dir = Path(data_dir)
++        self.components = []
++        self.interactions = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load adhesome components and interactions."""
++        # Load components
++        comp_path = self.data_dir / 'components.csv'
++        if comp_path.exists():
++            try:
++                with open(comp_path, 'r', encoding='utf-8') as f:
++                    content = f.read().strip()
++                    if content.startswith('404') or len(content) < 50:
++                        logger.warning("Adhesome: components.csv appears invalid (likely download error)")
++                    else:
++                        f.seek(0)
++                        reader = csv.DictReader(f)
++                        for row in reader:
++                            self.components.append(row)
++                        logger.info(f"Adhesome: Loaded {len(self.components)} components")
++            except Exception as e:
++                logger.warning(f"Adhesome: Error reading components.csv: {e}")
++
++        # Load interactions
++        int_path = self.data_dir / 'interactions.csv'
++        if int_path.exists():
++            try:
++                with open(int_path, 'r', encoding='utf-8') as f:
++                    content = f.read().strip()
++                    if content.startswith('404') or len(content) < 50:
++                        logger.warning("Adhesome: interactions.csv appears invalid (likely download error)")
++                    else:
++                        f.seek(0)
++                        reader = csv.DictReader(f)
++                        for row in reader:
++                            self.interactions.append(row)
++                        logger.info(f"Adhesome: Loaded {len(self.interactions)} interactions")
++            except Exception as e:
++                logger.warning(f"Adhesome: Error reading interactions.csv: {e}")
++
++        if not self.components and not self.interactions:
++            logger.warning("Adhesome: No valid data loaded (files may have failed to download)")
++
++    def get_nodes(self):
++        """Generate adhesome component nodes (if data is valid)."""
++        logger.info(f"Adhesome: Generating nodes from {len(self.components)} components...")
++        count = 0
++
++        for comp in self.components:
++            gene_name = comp.get('Official Symbol', comp.get('Gene', '')).strip()
++            if not gene_name:
++                continue
++
++            uniprot = comp.get('Swiss-Prot ID', comp.get('UniProt', '')).strip()
++            node_id = uniprot if uniprot else gene_name
++
++            props = {
++                'gene_name': self._sanitize(gene_name),
++                'functional_category': self._sanitize(comp.get('Functional Category', '')),
++                'source': 'Adhesome',
++            }
++
++            yield (node_id, "Gene", props)
++            count += 1
++
++        logger.info(f"Adhesome: Generated {count} Gene nodes")
++
++    def get_edges(self):
++        """Generate adhesome interaction edges (if data is valid)."""
++        logger.info(f"Adhesome: Generating edges from {len(self.interactions)} interactions...")
++        count = 0
++
++        for inter in self.interactions:
++            source = inter.get('Source', '').strip()
++            target = inter.get('Target', '').strip()
++            if not source or not target:
++                continue
++
++            props = {
++                'interaction_type': self._sanitize(inter.get('Type', '')),
++                'source_db': 'Adhesome',
++            }
++
++            yield (None, source, target, "AdhesomeInteraction", props)
++            count += 1
++
++        logger.info(f"Adhesome: Generated {count} edges")
+diff --git a/template_package/adapters/brenda_adapter.py b/template_package/adapters/brenda_adapter.py
+new file mode 100644
+index 0000000..47523c8
+--- /dev/null
++++ b/template_package/adapters/brenda_adapter.py
+@@ -0,0 +1,159 @@
++"""
++BRENDA Enzyme Adapter for BioCypher.
++
++Loads the ExPASy/BRENDA enzyme.dat flat file and generates:
++- Enzyme nodes with detailed catalytic activity and classification
++- Edges linking enzymes to proteins (via DR cross-references)
++
++The enzyme.dat file follows the Swiss-Prot-like flat file format
++with ID (EC number), DE (description), AN (alternative names),
++CA (catalytic activity), CC (comments), DR (cross-references).
++"""
++
++import re
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class BRENDAAdapter:
++    def __init__(self, data_dir="template_package/data/brenda"):
++        self.data_dir = Path(data_dir)
++        self.enzymes = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Parse the enzyme.dat flat file."""
++        dat_path = self.data_dir / 'enzyme.dat'
++        if not dat_path.exists():
++            logger.warning("BRENDA: enzyme.dat file not found")
++            return
++
++        logger.info("BRENDA: Parsing enzyme.dat...")
++
++        current = {
++            'id': '', 'name': '', 'alt_names': [],
++            'catalytic_activity': [], 'comments': [],
++            'cross_refs': []
++        }
++
++        with open(dat_path, 'r', encoding='utf-8') as f:
++            for line in f:
++                line = line.rstrip('\n')
++
++                if line.startswith('//'):
++                    # End of record
++                    if current['id']:
++                        self.enzymes.append({
++                            'ec_number': current['id'],
++                            'name': ' '.join(current.get('name_parts', [])).strip().rstrip('.'),
++                            'alternative_names': '; '.join(current['alt_names']),
++                            'catalytic_activity': ' '.join(current['catalytic_activity']).strip(),
++                            'comments': ' '.join(current['comments']).strip(),
++                            'cross_refs': current['cross_refs'],
++                        })
++                    current = {
++                        'id': '', 'name_parts': [], 'alt_names': [],
++                        'catalytic_activity': [], 'comments': [],
++                        'cross_refs': []
++                    }
++                    continue
++
++                if line.startswith('ID   '):
++                    current['id'] = line[5:].strip()
++                elif line.startswith('DE   '):
++                    if 'name_parts' not in current:
++                        current['name_parts'] = []
++                    current['name_parts'].append(line[5:].strip())
++                elif line.startswith('AN   '):
++                    an = line[5:].strip().rstrip('.')
++                    if an:
++                        current['alt_names'].append(an)
++                elif line.startswith('CA   '):
++                    current['catalytic_activity'].append(line[5:].strip())
++                elif line.startswith('CC   '):
++                    cc_text = line[5:].strip()
++                    if cc_text and not cc_text.startswith('---'):
++                        current['comments'].append(cc_text)
++                elif line.startswith('DR   '):
++                    # DR lines contain cross-refs like: P07327, ADH1A_HUMAN;  P28469, ADH1A_MACMU;
++                    dr_text = line[5:].strip()
++                    refs = dr_text.split(';')
++                    for ref in refs:
++                        ref = ref.strip()
++                        if ',' in ref:
++                            parts = ref.split(',')
++                            uniprot_id = parts[0].strip()
++                            entry_name = parts[1].strip() if len(parts) > 1 else ''
++                            if uniprot_id and '_HUMAN' in entry_name:
++                                current['cross_refs'].append(uniprot_id)
++
++        logger.info(f"BRENDA: Loaded {len(self.enzymes)} enzyme entries")
++
++    def get_nodes(self):
++        """
++        Generate Enzyme nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("BRENDA: Generating enzyme nodes...")
++        count = 0
++
++        for enz in self.enzymes:
++            ec = enz['ec_number']
++            if not ec or ec.startswith('Transferred') or ec.startswith('Deleted'):
++                continue
++
++            # Determine EC class
++            ec_parts = ec.split('.')
++            ec_class = ''
++            class_map = {
++                '1': 'Oxidoreductases', '2': 'Transferases',
++                '3': 'Hydrolases', '4': 'Lyases',
++                '5': 'Isomerases', '6': 'Ligases',
++                '7': 'Translocases'
++            }
++            if ec_parts and ec_parts[0] in class_map:
++                ec_class = class_map[ec_parts[0]]
++
++            props = {
++                'name': self._sanitize(enz['name']),
++                'alternative_names': self._sanitize(enz['alternative_names']),
++                'catalytic_activity': self._sanitize(enz['catalytic_activity']),
++                'ec_class': ec_class,
++                'source': 'BRENDA/ExPASy',
++            }
++
++            yield (f"EC:{ec}", "Enzyme", props)
++            count += 1
++
++        logger.info(f"BRENDA: Generated {count} Enzyme nodes")
++
++    def get_edges(self):
++        """
++        Generate edges linking enzymes to human proteins.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("BRENDA: Generating enzyme-protein edges...")
++        count = 0
++
++        for enz in self.enzymes:
++            ec = enz['ec_number']
++            if not ec or ec.startswith('Transferred') or ec.startswith('Deleted'):
++                continue
++
++            for uniprot_id in enz['cross_refs']:
++                props = {
++                    'ec_number': ec,
++                    'source': 'BRENDA/ExPASy',
++                }
++                yield (None, f"EC:{ec}", uniprot_id, "EnzymeCatalyzedBy", props)
++                count += 1
++
++        logger.info(f"BRENDA: Generated {count} enzyme-protein edges")
+diff --git a/template_package/adapters/chapnet_adapter.py b/template_package/adapters/chapnet_adapter.py
+new file mode 100644
+index 0000000..7507412
+--- /dev/null
++++ b/template_package/adapters/chapnet_adapter.py
+@@ -0,0 +1,153 @@
++"""
++ChapNet Adapter for BioCypher.
++
++Loads chaperone-protein co-expression/interaction network data from ChapNet
++(https://netbio.bgu.ac.il/chapnet/). Data is in Cytoscape JSON format
++containing chaperone correlation networks across tissues.
++
++Generates:
++- Chaperone interaction edges (protein-protein co-expression correlations)
++"""
++
++import json
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class ChapNetAdapter:
++    def __init__(self, data_dir="template_package/data/chapnet"):
++        self.data_dir = Path(data_dir)
++        self.interactions = []
++        self.genes = set()
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load ChapNet correlation data."""
++        # Try JSON files first (Cytoscape format)
++        json_files = sorted(self.data_dir.glob('*.json'))
++        if json_files:
++            self._load_json_networks(json_files)
++
++        # Also load CSV correlation data
++        corr_path = self.data_dir / 'ChaperoneCorrelation.csv'
++        if corr_path.exists():
++            self._load_correlation_csv(corr_path)
++
++    def _load_json_networks(self, json_files):
++        """Load Cytoscape JSON network files."""
++        for jf in json_files:
++            try:
++                with open(jf, 'r', encoding='utf-8') as f:
++                    data = json.load(f)
++
++                elements = data.get('elements', {})
++                edges = elements.get('edges', [])
++                nodes = elements.get('nodes', [])
++
++                # Track gene Ensembl IDs from nodes
++                for node in nodes:
++                    nd = node.get('data', {})
++                    ensembl = nd.get('Ensembl', '')
++                    if ensembl:
++                        self.genes.add(ensembl)
++
++                network_name = jf.stem
++
++                for edge in edges:
++                    ed = edge.get('data', {})
++                    source = ed.get('source', '')
++                    target = ed.get('target', '')
++                    source_sym = ed.get('sourceSymbol', ed.get('Protein1Symbol', '')).strip()
++                    target_sym = ed.get('targetSymbol', ed.get('Protein2Symbol', '')).strip()
++
++                    if not source or not target:
++                        continue
++
++                    self.interactions.append({
++                        'source': source,
++                        'target': target,
++                        'source_symbol': source_sym,
++                        'target_symbol': target_sym,
++                        'network': network_name,
++                    })
++
++                logger.info(f"ChapNet: Loaded {len(edges)} edges from {jf.name}")
++            except Exception as e:
++                logger.warning(f"ChapNet: Error loading {jf.name}: {e}")
++
++    def _load_correlation_csv(self, path):
++        """Load bulk correlation CSV (tissue-specific correlations)."""
++        try:
++            count = 0
++            seen = set()
++            with open(path, 'r', encoding='utf-8') as f:
++                reader = csv.DictReader(f)
++                for row in reader:
++                    p1 = row.get('Protein1', '').strip()
++                    p2 = row.get('Protein2', '').strip()
++                    p1_sym = row.get('Protein1Symbol', '').strip()
++                    p2_sym = row.get('Protein2Symbol', '').strip()
++
++                    if not p1 or not p2:
++                        continue
++
++                    pair = tuple(sorted([p1, p2]))
++                    if pair in seen:
++                        continue
++                    seen.add(pair)
++
++                    self.interactions.append({
++                        'source': p1,
++                        'target': p2,
++                        'source_symbol': p1_sym,
++                        'target_symbol': p2_sym,
++                        'network': 'ChaperoneCorrelation',
++                    })
++                    count += 1
++
++            logger.info(f"ChapNet: Loaded {count} unique pairs from correlation CSV")
++        except Exception as e:
++            logger.warning(f"ChapNet: Error loading correlation CSV: {e}")
++
++    def get_nodes(self):
++        """No additional nodes - uses existing Gene nodes."""
++        logger.info("ChapNet: No additional nodes to generate (uses Gene nodes)")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate chaperone interaction edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info(f"ChapNet: Generating edges from {len(self.interactions)} interactions...")
++        count = 0
++        seen = set()
++
++        for inter in self.interactions:
++            source = inter['source']
++            target = inter['target']
++            pair = tuple(sorted([source, target]))
++            if pair in seen:
++                continue
++            seen.add(pair)
++
++            props = {
++                'source_symbol': self._sanitize(inter['source_symbol']),
++                'target_symbol': self._sanitize(inter['target_symbol']),
++                'network': inter['network'],
++                'source_db': 'ChapNet',
++            }
++
++            yield (None, source, target, "ChaperoneInteraction", props)
++            count += 1
++
++        logger.info(f"ChapNet: Generated {count} chaperone interaction edges")
+diff --git a/template_package/adapters/encori_adapter.py b/template_package/adapters/encori_adapter.py
+new file mode 100644
+index 0000000..fe0d461
+--- /dev/null
++++ b/template_package/adapters/encori_adapter.py
+@@ -0,0 +1,141 @@
++"""
++ENCORI (starBase) Adapter for BioCypher.
++
++Loads miRNA-target interaction data from ENCORI/starBase.
++Data includes experimentally validated and computationally predicted
++miRNA-mRNA interactions from CLIP-Seq experiments.
++
++Generates:
++- miRNA nodes (miRNA entities)
++- miRNA-target edges (miRNA targeting gene relationships)
++"""
++
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class ENCORIAdapter:
++    def __init__(self, data_dir="template_package/data/encori"):
++        self.data_dir = Path(data_dir)
++        self.mirna_targets = []
++        self.mirnas = {}
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load ENCORI miRNA-target TSV files."""
++        logger.info("ENCORI: Loading miRNA-target data...")
++        total = 0
++
++        for tsv_file in sorted(self.data_dir.glob('*.json')):
++            # These are actually TSV files with .json extension and comment headers
++            try:
++                count = 0
++                with open(tsv_file, 'r', encoding='utf-8') as f:
++                    # Skip comment lines
++                    header = None
++                    for line in f:
++                        line = line.strip()
++                        if line.startswith('#'):
++                            continue
++                        if header is None:
++                            header = line.split('\t')
++                            continue
++
++                        parts = line.split('\t')
++                        if len(parts) < 10:
++                            continue
++
++                        row = dict(zip(header, parts))
++
++                        mirna_id = row.get('miRNAid', '').strip()
++                        mirna_name = row.get('miRNAname', '').strip()
++                        gene_id = row.get('geneID', '').strip()
++                        gene_name = row.get('geneName', '').strip()
++                        gene_type = row.get('geneType', '').strip()
++                        chrom = row.get('chromosome', '').strip()
++                        clip_exp_num = row.get('clipExpNum', '0').strip()
++                        target_scan = row.get('TargetScan', '0').strip()
++
++                        if not mirna_id or not gene_id:
++                            continue
++
++                        # Only keep protein_coding gene targets
++                        if gene_type and gene_type != 'protein_coding':
++                            continue
++
++                        self.mirnas[mirna_id] = mirna_name
++
++                        clip_num = int(clip_exp_num) if clip_exp_num.isdigit() else 0
++                        ts = int(target_scan) if target_scan.isdigit() else 0
++
++                        self.mirna_targets.append({
++                            'mirna_id': mirna_id,
++                            'mirna_name': mirna_name,
++                            'gene_id': gene_id,
++                            'gene_name': gene_name,
++                            'chromosome': chrom,
++                            'clip_experiments': clip_num,
++                            'targetscan': ts,
++                        })
++                        count += 1
++
++                logger.info(f"ENCORI: Loaded {count} targets from {tsv_file.name}")
++                total += count
++            except Exception as e:
++                logger.warning(f"ENCORI: Error loading {tsv_file.name}: {e}")
++
++        logger.info(f"ENCORI: Loaded {total} miRNA-target interactions total, {len(self.mirnas)} unique miRNAs")
++
++    def get_nodes(self):
++        """
++        Generate miRNA nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("ENCORI: Generating miRNA nodes...")
++        count = 0
++
++        for mirna_id, mirna_name in self.mirnas.items():
++            props = {
++                'name': self._sanitize(mirna_name),
++                'source': 'ENCORI',
++            }
++            yield (mirna_id, "MicroRNA", props)
++            count += 1
++
++        logger.info(f"ENCORI: Generated {count} miRNA nodes")
++
++    def get_edges(self):
++        """
++        Generate miRNA-target edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info(f"ENCORI: Generating edges from {len(self.mirna_targets)} interactions...")
++        count = 0
++        seen = set()
++
++        for target in self.mirna_targets:
++            pair = (target['mirna_id'], target['gene_id'])
++            if pair in seen:
++                continue
++            seen.add(pair)
++
++            props = {
++                'gene_name': self._sanitize(target['gene_name']),
++                'clip_experiments': target['clip_experiments'],
++                'targetscan': target['targetscan'],
++                'source': 'ENCORI',
++            }
++
++            yield (None, target['mirna_id'], target['gene_id'], "MiRNATargetsGene", props)
++            count += 1
++
++        logger.info(f"ENCORI: Generated {count} miRNA-target edges")
+diff --git a/template_package/adapters/epimap_adapter.py b/template_package/adapters/epimap_adapter.py
+new file mode 100644
+index 0000000..4fd2ce7
+--- /dev/null
++++ b/template_package/adapters/epimap_adapter.py
+@@ -0,0 +1,117 @@
++"""
++EpiMap Adapter for BioCypher.
++
++Loads EpiMap (Epigenome Integration across Multiple Annotation Projects)
++chromatin state segmentation data. EpiMap extends the Roadmap Epigenomics
++project with imputed chromatin state data across hundreds of biosamples.
++
++Generates:
++- ChromatinState nodes (genomic regions annotated with chromatin states)
++
++Chromatin states include: TssA, TssFlnk, EnhA1, EnhA2, EnhG1, EnhG2,
++TxWk, Tx, ZNF/Rpts, Het, TssBiv, EnhBiv, ReprPC, ReprPCWk, Quies, etc.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class EpiMapAdapter:
++    def __init__(self, data_dir="template_package/data/epimap"):
++        self.data_dir = Path(data_dir)
++        self.states = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load EpiMap chromatin state segmentation files."""
++        logger.info("EpiMap: Loading chromatin state data...")
++        total = 0
++
++        # Active chromatin state types (skip quiescent for size)
++        active_states = {
++            'TssA', 'TssFlnk', 'TssFlnkU', 'TssFlnkD',
++            'Tx', 'TxWk', 'EnhG1', 'EnhG2', 'EnhA1', 'EnhA2',
++            'EnhWk', 'TssBiv', 'EnhBiv', 'ReprPC', 'ReprPCWk',
++            'ZNF/Rpts', 'Het'
++        }
++
++        for bed_file in sorted(self.data_dir.glob('*.bed.gz')):
++            biosample_id = bed_file.stem.split('_')[0]
++            count = 0
++
++            try:
++                with gzip.open(bed_file, 'rt', encoding='utf-8') as f:
++                    for line in f:
++                        line = line.strip()
++                        if not line or line.startswith('#') or line.startswith('track'):
++                            continue
++
++                        parts = line.split('\t')
++                        if len(parts) < 4:
++                            continue
++
++                        chrom = parts[0]
++                        start = int(parts[1])
++                        end = int(parts[2])
++                        state = parts[3]
++
++                        # Only keep active/functional states (not Quies)
++                        if state not in active_states:
++                            continue
++
++                        state_id = f"EPI:{biosample_id}:{chrom}:{start}-{end}"
++
++                        self.states.append({
++                            'id': state_id,
++                            'chromosome': chrom,
++                            'start': start,
++                            'end': end,
++                            'state': state,
++                            'biosample_id': biosample_id,
++                        })
++                        count += 1
++            except Exception as e:
++                logger.warning(f"EpiMap: Error reading {bed_file.name}: {e}")
++
++            logger.info(f"EpiMap: Loaded {count} active states from {bed_file.name}")
++            total += count
++
++        logger.info(f"EpiMap: Loaded {total} chromatin state regions total")
++
++    def get_nodes(self):
++        """
++        Generate ChromatinState nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("EpiMap: Generating chromatin state nodes...")
++        count = 0
++
++        for state in self.states:
++            props = {
++                'chromosome': state['chromosome'],
++                'start': state['start'],
++                'end': state['end'],
++                'state': state['state'],
++                'biosample_id': state['biosample_id'],
++                'genome_assembly': 'GRCh38',
++                'source': 'EpiMap',
++            }
++
++            yield (state['id'], "ChromatinState", props)
++            count += 1
++
++        logger.info(f"EpiMap: Generated {count} chromatin state nodes")
++
++    def get_edges(self):
++        """No edges generated currently."""
++        logger.info("EpiMap: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/evpedia_adapter.py b/template_package/adapters/evpedia_adapter.py
+new file mode 100644
+index 0000000..f964160
+--- /dev/null
++++ b/template_package/adapters/evpedia_adapter.py
+@@ -0,0 +1,125 @@
++"""
++EVpedia Adapter for BioCypher.
++
++Loads extracellular vesicle (EV) proteomics and RNA data from EVpedia.
++EVpedia is a community web portal for extracellular vesicle research.
++
++Generates:
++- EV origin nodes (tissue/cell sources of EVs)
++- circRNA annotation edges (circRNAs detected in EVs)
++"""
++
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class EVpediaAdapter:
++    def __init__(self, data_dir="template_package/data/evpedia"):
++        self.data_dir = Path(data_dir)
++        self.origins = []
++        self.circrnas = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load EVpedia data files."""
++        # Load EV origin/tissue data
++        origin_path = self.data_dir / 'browse_origin.csv'
++        if origin_path.exists():
++            try:
++                with open(origin_path, 'r', encoding='utf-8') as f:
++                    reader = csv.DictReader(f)
++                    for row in reader:
++                        name = row.get('Tissue/Cell name', '').strip()
++                        if not name:
++                            continue
++                        self.origins.append(row)
++                logger.info(f"EVpedia: Loaded {len(self.origins)} EV tissue/cell origins")
++            except Exception as e:
++                logger.warning(f"EVpedia: Error reading browse_origin.csv: {e}")
++
++        # Load circRNA annotations
++        circ_path = self.data_dir / 'circRNAs_anno.csv'
++        if circ_path.exists():
++            try:
++                count = 0
++                with open(circ_path, 'r', encoding='utf-8') as f:
++                    reader = csv.DictReader(f)
++                    for row in reader:
++                        circ_id = row.get('circID', '').strip().strip('"')
++                        if not circ_id:
++                            continue
++                        self.circrnas.append({
++                            'circ_id': circ_id,
++                            'circbase_id': row.get('circBase ID', '').strip().strip('"'),
++                            'position': row.get('Genomic position', '').strip().strip('"'),
++                            'strand': row.get('Strand', '').strip().strip('"'),
++                            'gene_symbol': row.get('Gene symbol', '').strip().strip('"'),
++                            'gene_type': row.get('Gene type', '').strip().strip('"'),
++                            'sample_type': row.get('Sample type', '').strip().strip('"'),
++                        })
++                        count += 1
++                logger.info(f"EVpedia: Loaded {count} circRNA annotations")
++            except Exception as e:
++                logger.warning(f"EVpedia: Error reading circRNAs_anno.csv: {e}")
++
++    def get_nodes(self):
++        """
++        Generate EV origin tissue/cell nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("EVpedia: Generating EV origin nodes...")
++        count = 0
++
++        for origin in self.origins:
++            name = origin.get('Tissue/Cell name', '').strip()
++            full_name = origin.get('Full name', name).strip()
++            category = origin.get('Main category', '').strip()
++            cell_type = origin.get('Tissue/Cell type', '').strip()
++
++            node_id = f"EVP:{name}"
++
++            props = {
++                'name': self._sanitize(full_name),
++                'category': self._sanitize(category),
++                'cell_type': self._sanitize(cell_type),
++                'source': 'EVpedia',
++            }
++
++            yield (node_id, "EVOrigin", props)
++            count += 1
++
++        # Also create circRNA nodes
++        seen_circ = set()
++        for circ in self.circrnas:
++            cid = circ['circ_id']
++            if cid in seen_circ:
++                continue
++            seen_circ.add(cid)
++
++            props = {
++                'position': self._sanitize(circ['position']),
++                'strand': circ['strand'],
++                'gene_symbol': self._sanitize(circ['gene_symbol']),
++                'gene_type': self._sanitize(circ['gene_type']),
++                'sample_type': self._sanitize(circ['sample_type']),
++                'source': 'EVpedia',
++            }
++
++            yield (f"EVP:{cid}", "CircularRNA", props)
++            count += 1
++
++        logger.info(f"EVpedia: Generated {count} nodes")
++
++    def get_edges(self):
++        """No edges generated currently."""
++        logger.info("EVpedia: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/lipid_ontology_adapter.py b/template_package/adapters/lipid_ontology_adapter.py
+new file mode 100644
+index 0000000..914ea3a
+--- /dev/null
++++ b/template_package/adapters/lipid_ontology_adapter.py
+@@ -0,0 +1,127 @@
++"""
++LION (Lipid Ontology) Adapter for BioCypher.
++
++Loads LION ontology terms and lipid-term associations from the
++Lipid Ontology project (http://www.lipidontology.com/).
++
++LION provides a controlled vocabulary for lipid biological functions,
++physical properties, and classifications, linking individual lipid
++species to biological concepts.
++
++Generates:
++- LIONTerm nodes (ontology terms describing lipid properties/functions)
++- Lipid-to-LION-term association edges
++"""
++
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class LipidOntologyAdapter:
++    def __init__(self, data_dir="template_package/data/lipid_ontology"):
++        self.data_dir = Path(data_dir)
++        self.terms = {}
++        self.associations = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load LION terms and lipid-term associations."""
++        # Load LION terms
++        terms_path = self.data_dir / 'LION-terms.csv'
++        if terms_path.exists():
++            try:
++                with open(terms_path, 'r', encoding='utf-8') as f:
++                    reader = csv.DictReader(f)
++                    for row in reader:
++                        name = row.get('name', '').strip()
++                        lion_id = row.get('LION', '').strip()
++                        if lion_id:
++                            self.terms[lion_id] = name
++                logger.info(f"LION: Loaded {len(self.terms)} ontology terms")
++            except Exception as e:
++                logger.warning(f"LION: Error reading LION-terms.csv: {e}")
++
++        # Load lipid-LION associations (wide matrix format)
++        assoc_path = self.data_dir / 'all-LION-lipid-associations.csv'
++        if assoc_path.exists():
++            try:
++                with open(assoc_path, 'r', encoding='utf-8') as f:
++                    reader = csv.reader(f)
++                    header = next(reader)  # First row: empty + LION IDs
++                    lion_ids = header[1:]  # Skip first empty column
++
++                    # Second row: empty + LION term names
++                    names_row = next(reader)
++
++                    count = 0
++                    for row in reader:
++                        if not row or not row[0]:
++                            continue
++                        lipid_name = row[0].strip()
++
++                        for i, val in enumerate(row[1:], 0):
++                            val = val.strip()
++                            if val == 'x' and i < len(lion_ids):
++                                lion_id = lion_ids[i].strip()
++                                self.associations.append({
++                                    'lipid_name': lipid_name,
++                                    'lion_id': lion_id,
++                                })
++                                count += 1
++
++                logger.info(f"LION: Loaded {count} lipid-term associations")
++            except Exception as e:
++                logger.warning(f"LION: Error reading associations: {e}")
++
++    def get_nodes(self):
++        """
++        Generate LION term nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("LION: Generating ontology term nodes...")
++        count = 0
++
++        for lion_id, name in self.terms.items():
++            props = {
++                'name': self._sanitize(name),
++                'source': 'LION',
++            }
++
++            yield (lion_id, "LipidOntologyTerm", props)
++            count += 1
++
++        logger.info(f"LION: Generated {count} ontology term nodes")
++
++    def get_edges(self):
++        """
++        Generate lipid-to-LION-term association edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info(f"LION: Generating edges from {len(self.associations)} associations...")
++        count = 0
++
++        for assoc in self.associations:
++            lipid_name = assoc['lipid_name']
++            lion_id = assoc['lion_id']
++
++            # Use lipid name as source ID (will need to cross-ref with LIPIDMAPS)
++            lipid_id = f"LION_LIPID:{lipid_name}"
++
++            props = {
++                'lipid_name': self._sanitize(lipid_name),
++                'source': 'LION',
++            }
++
++            yield (None, lipid_id, lion_id, "LipidHasOntologyTerm", props)
++            count += 1
++
++        logger.info(f"LION: Generated {count} lipid-term edges")
+diff --git a/template_package/adapters/raftprot_adapter.py b/template_package/adapters/raftprot_adapter.py
+new file mode 100644
+index 0000000..6a3f56b
+--- /dev/null
++++ b/template_package/adapters/raftprot_adapter.py
+@@ -0,0 +1,134 @@
++"""
++RaftProt Adapter for BioCypher.
++
++Loads lipid raft proteomics data from RaftProt (https://raftprot.org/).
++RaftProt is a database of mammalian lipid raft-associated proteins
++identified through detergent-resistant membrane (DRM) proteomics.
++
++Generates:
++- Gene-in-lipid-raft edges (proteins detected in lipid raft fractions)
++"""
++
++import csv
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class RaftProtAdapter:
++    def __init__(self, data_dir="template_package/data/raftprot"):
++        self.data_dir = Path(data_dir)
++        self.orthologs = {}
++        self.proteins = []
++        self._load_orthologs()
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_orthologs(self):
++        """Load mouse-to-human ortholog mapping."""
++        orth_path = Path("template_package/mappings/mouse_to_human_orthologs.json")
++        if orth_path.exists():
++            try:
++                with open(orth_path, 'r') as f:
++                    self.orthologs = json.load(f)
++                logger.info(f"RaftProt: Loaded {len(self.orthologs)} mouse-to-human orthologs")
++            except Exception as e:
++                logger.warning(f"RaftProt: Could not load orthologs: {e}")
++
++    def _load_data(self):
++        """Load RaftProt data file."""
++        data_path = self.data_dir / 'Raftprot.v2.4.txt'
++        if not data_path.exists():
++            logger.warning("RaftProt: Data file not found")
++            return
++
++        logger.info("RaftProt: Loading raft proteomics data...")
++        count = 0
++
++        try:
++            with open(data_path, 'r', encoding='utf-8') as f:
++                # File uses quoted, space-separated fields
++                reader = csv.DictReader(f, delimiter=' ', quotechar='"')
++                for row in reader:
++                    uniprot = row.get('UniProt', row.get('OriginalID', '')).strip()
++                    organism = row.get('Organism', '').strip()
++                    gene_name = row.get('gene_name', '').strip()
++                    protein_name = row.get('protein_name', '').strip()
++                    method = row.get('BiochemMethod', '').strip()
++                    detergent = row.get('Detergent', '').strip()
++                    tissue_id = row.get('TissueID', '').strip()
++
++                    if not uniprot:
++                        continue
++
++                    # Apply species filtering (Human + Mouse with ortholog mapping)
++                    species = 'Homo sapiens' if organism == 'Human' else 'Mus musculus' if organism == 'Mouse' else organism
++                    if species == 'Mus musculus':
++                        mapped_id = self.orthologs.get(uniprot, uniprot)
++                    elif species == 'Homo sapiens':
++                        mapped_id = uniprot
++                    else:
++                        continue  # Skip other species
++
++                    self.proteins.append({
++                        'uniprot': mapped_id,
++                        'original_id': uniprot,
++                        'species': species,
++                        'gene_name': gene_name,
++                        'protein_name': protein_name,
++                        'method': method,
++                        'detergent': detergent,
++                        'tissue_id': tissue_id,
++                    })
++                    count += 1
++        except Exception as e:
++            logger.warning(f"RaftProt: Error parsing data: {e}")
++
++        logger.info(f"RaftProt: Loaded {count} raft protein entries")
++
++    def get_nodes(self):
++        """No additional nodes - uses existing Gene nodes."""
++        logger.info("RaftProt: No additional nodes (uses Gene nodes)")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate gene-in-lipid-raft edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info(f"RaftProt: Generating edges from {len(self.proteins)} entries...")
++        count = 0
++        seen = set()
++
++        # Create a single "lipid_raft" target node concept
++        raft_target = "GO:0045121"  # lipid raft GO term
++
++        for prot in self.proteins:
++            uid = prot['uniprot']
++            key = (uid, prot['species'])
++            if key in seen:
++                continue
++            seen.add(key)
++
++            props = {
++                'gene_name': self._sanitize(prot['gene_name']),
++                'method': self._sanitize(prot['method']),
++                'detergent': self._sanitize(prot['detergent']),
++                'species': prot['species'],
++                'source': 'RaftProt',
++            }
++
++            if prot['species'] == 'Mus musculus' and prot['original_id'] != prot['uniprot']:
++                props['original_id'] = prot['original_id']
++
++            yield (None, uid, raft_target, "ProteinInLipidRaft", props)
++            count += 1
++
++        logger.info(f"RaftProt: Generated {count} raft association edges")
+diff --git a/template_package/adapters/silva_adapter.py b/template_package/adapters/silva_adapter.py
+new file mode 100644
+index 0000000..e1ac8c2
+--- /dev/null
++++ b/template_package/adapters/silva_adapter.py
+@@ -0,0 +1,139 @@
++"""
++SILVA Adapter for BioCypher.
++
++Loads SILVA ribosomal RNA taxonomy data. SILVA provides comprehensive,
++quality-checked and regularly updated databases of aligned ribosomal
++RNA (rRNA) gene sequences from bacteria, archaea, and eukaryota.
++
++While primarily a microbiology/taxonomy resource, this is useful for
++understanding the broader biological context of organisms referenced
++in other databases.
++
++Generates:
++- Taxonomy nodes (taxonomic classification hierarchy)
++- Taxonomy parent-child edges
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class SILVAAdapter:
++    def __init__(self, data_dir="template_package/data/silva"):
++        self.data_dir = Path(data_dir)
++        self.taxa = {}
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load SILVA taxonomy data."""
++        # Load SSU taxonomy (most comprehensive)
++        tax_path = self.data_dir / 'tax_slv_ssu_138.2.txt.gz'
++        if not tax_path.exists():
++            # Try alternate version
++            for alt in self.data_dir.glob('tax_slv_ssu_*.txt.gz'):
++                tax_path = alt
++                break
++
++        if not tax_path.exists():
++            logger.warning("SILVA: No taxonomy file found")
++            return
++
++        logger.info(f"SILVA: Loading taxonomy from {tax_path.name}...")
++        count = 0
++
++        try:
++            with gzip.open(tax_path, 'rt', encoding='utf-8') as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++
++                    # Format: path\ttaxid\trank\tremark\trelease
++                    parts = line.split('\t')
++                    if len(parts) < 3:
++                        continue
++
++                    tax_path_str = parts[0].strip()
++                    tax_id = parts[1].strip()
++                    rank = parts[2].strip()
++
++                    if not tax_path_str:
++                        continue
++
++                    # Extract the last taxon name from the path
++                    path_parts = [p.strip() for p in tax_path_str.rstrip(';').split(';') if p.strip()]
++                    if not path_parts:
++                        continue
++
++                    name = path_parts[-1]
++                    full_path = ';'.join(path_parts)
++
++                    # Determine parent
++                    parent_path = ';'.join(path_parts[:-1]) if len(path_parts) > 1 else ''
++
++                    self.taxa[full_path] = {
++                        'tax_id': tax_id,
++                        'name': name,
++                        'rank': rank,
++                        'full_path': full_path,
++                        'parent_path': parent_path,
++                    }
++                    count += 1
++
++        except Exception as e:
++            logger.warning(f"SILVA: Error reading taxonomy: {e}")
++
++        logger.info(f"SILVA: Loaded {count} taxonomic entries")
++
++    def get_nodes(self):
++        """
++        Generate taxonomy nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("SILVA: Generating taxonomy nodes...")
++        count = 0
++
++        for path, taxon in self.taxa.items():
++            props = {
++                'name': self._sanitize(taxon['name']),
++                'rank': taxon['rank'],
++                'full_path': self._sanitize(taxon['full_path']),
++                'source': 'SILVA',
++            }
++
++            yield (f"SILVA:{taxon['tax_id']}", "TaxonomicEntity", props)
++            count += 1
++
++        logger.info(f"SILVA: Generated {count} taxonomy nodes")
++
++    def get_edges(self):
++        """
++        Generate taxonomy parent-child edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("SILVA: Generating taxonomy hierarchy edges...")
++        count = 0
++
++        for path, taxon in self.taxa.items():
++            parent_path = taxon['parent_path']
++            if parent_path and parent_path in self.taxa:
++                parent = self.taxa[parent_path]
++                yield (
++                    None,
++                    f"SILVA:{taxon['tax_id']}",
++                    f"SILVA:{parent['tax_id']}",
++                    "TaxonChildOf",
++                    {'source': 'SILVA'}
++                )
++                count += 1
++
++        logger.info(f"SILVA: Generated {count} taxonomy hierarchy edges")
+diff --git a/template_package/adapters/tarbase_adapter.py b/template_package/adapters/tarbase_adapter.py
+new file mode 100644
+index 0000000..460aa90
+--- /dev/null
++++ b/template_package/adapters/tarbase_adapter.py
+@@ -0,0 +1,124 @@
++"""
++TarBase / miRDB Adapter for BioCypher.
++
++Loads miRNA target prediction data from miRDB v6.0 (which was
++originally intended to complement DIANA-TarBase data).
++
++miRDB provides computationally predicted miRNA targets with
++prediction scores. The data includes human miRNA-target pairs.
++
++Generates:
++- miRNA nodes
++- miRNA-target prediction edges
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class TarBaseAdapter:
++    def __init__(self, data_dir="template_package/data/tarbase"):
++        self.data_dir = Path(data_dir)
++        self.predictions = []
++        self.mirnas = set()
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load miRDB prediction data."""
++        pred_path = self.data_dir / 'miRDB_v6.0_prediction_result.txt.gz'
++        if not pred_path.exists():
++            logger.warning("TarBase/miRDB: Prediction file not found")
++            return
++
++        logger.info("TarBase/miRDB: Loading prediction data...")
++        count = 0
++        human_count = 0
++
++        try:
++            with gzip.open(pred_path, 'rt', encoding='utf-8') as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++
++                    parts = line.split('\t')
++                    if len(parts) < 3:
++                        continue
++
++                    mirna_id = parts[0].strip()
++                    target_id = parts[1].strip()  # RefSeq ID
++                    score = float(parts[2].strip())
++
++                    # Only keep human miRNAs (hsa-miR prefix)
++                    if not mirna_id.startswith('hsa-'):
++                        continue
++
++                    # Only keep high-confidence predictions (score >= 80)
++                    if score < 80:
++                        continue
++
++                    self.mirnas.add(mirna_id)
++                    self.predictions.append({
++                        'mirna_id': mirna_id,
++                        'target_id': target_id,
++                        'score': score,
++                    })
++                    human_count += 1
++                    count += 1
++
++        except Exception as e:
++            logger.warning(f"TarBase/miRDB: Error loading data: {e}")
++
++        logger.info(f"TarBase/miRDB: Loaded {human_count} human high-confidence predictions ({len(self.mirnas)} miRNAs)")
++
++    def get_nodes(self):
++        """
++        Generate miRNA nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("TarBase/miRDB: Generating miRNA nodes...")
++        count = 0
++
++        for mirna_id in sorted(self.mirnas):
++            props = {
++                'name': mirna_id,
++                'source': 'miRDB',
++            }
++            yield (f"miRDB:{mirna_id}", "MicroRNA", props)
++            count += 1
++
++        logger.info(f"TarBase/miRDB: Generated {count} miRNA nodes")
++
++    def get_edges(self):
++        """
++        Generate miRNA-target prediction edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info(f"TarBase/miRDB: Generating edges from {len(self.predictions)} predictions...")
++        count = 0
++
++        for pred in self.predictions:
++            props = {
++                'prediction_score': pred['score'],
++                'source': 'miRDB',
++            }
++
++            yield (
++                None,
++                f"miRDB:{pred['mirna_id']}",
++                f"RefSeq:{pred['target_id']}",
++                "MiRNATargetPrediction",
++                props
++            )
++            count += 1
++
++        logger.info(f"TarBase/miRDB: Generated {count} prediction edges")
+diff --git a/template_package/adapters/threed_genome_adapter.py b/template_package/adapters/threed_genome_adapter.py
+new file mode 100644
+index 0000000..63de43d
+--- /dev/null
++++ b/template_package/adapters/threed_genome_adapter.py
+@@ -0,0 +1,106 @@
++"""
++3D Genome Browser Adapter for BioCypher.
++
++Loads TAD (Topologically Associating Domain) data from ENCODE
++chromatin conformation experiments and generates:
++- TAD nodes (genomic domains that represent 3D chromatin organization)
++
++TADs are self-interacting genomic regions that play key roles in
++gene regulation and genome organization.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class ThreeDGenomeAdapter:
++    def __init__(self, data_dir="template_package/data/3dgenome"):
++        self.data_dir = Path(data_dir)
++        self.tads = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load TAD BED files from 3D Genome Browser data."""
++        logger.info("3DGenome: Loading TAD data...")
++        total_count = 0
++
++        for bed_file in sorted(self.data_dir.glob('*.bed.gz')):
++            experiment_id = bed_file.stem.replace('.bed', '')
++            count = 0
++
++            try:
++                with gzip.open(bed_file, 'rt', encoding='utf-8') as f:
++                    for line in f:
++                        line = line.strip()
++                        if not line or line.startswith('#') or line.startswith('track'):
++                            continue
++
++                        parts = line.split('\t')
++                        if len(parts) < 4:
++                            continue
++
++                        chrom = parts[0]
++                        start = int(parts[1])
++                        end = int(parts[2])
++                        name = parts[3] if len(parts) > 3 else f"{chrom}:{start}-{end}"
++                        score = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
++
++                        tad_id = f"3DG:{experiment_id}:{chrom}:{start}-{end}"
++
++                        self.tads.append({
++                            'id': tad_id,
++                            'chromosome': chrom,
++                            'start': start,
++                            'end': end,
++                            'name': name,
++                            'score': score,
++                            'experiment_id': experiment_id,
++                        })
++                        count += 1
++            except Exception as e:
++                logger.warning(f"3DGenome: Error reading {bed_file.name}: {e}")
++                continue
++
++            logger.info(f"3DGenome: Loaded {count} TADs from {bed_file.name}")
++            total_count += count
++
++        logger.info(f"3DGenome: Loaded {total_count} TADs total")
++
++    def get_nodes(self):
++        """
++        Generate TAD nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("3DGenome: Generating TAD nodes...")
++        count = 0
++
++        for tad in self.tads:
++            props = {
++                'chromosome': tad['chromosome'],
++                'start': tad['start'],
++                'end': tad['end'],
++                'name': self._sanitize(tad['name']),
++                'score': tad['score'],
++                'experiment_id': tad['experiment_id'],
++                'genome_assembly': 'GRCh38',
++                'source': '3DGenomeBrowser',
++            }
++
++            yield (tad['id'], "TopologicalDomain", props)
++            count += 1
++
++        logger.info(f"3DGenome: Generated {count} TAD nodes")
++
++    def get_edges(self):
++        """No edges for TADs currently."""
++        logger.info("3DGenome: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/translocatome_adapter.py b/template_package/adapters/translocatome_adapter.py
+new file mode 100644
+index 0000000..abeb01d
+--- /dev/null
++++ b/template_package/adapters/translocatome_adapter.py
+@@ -0,0 +1,102 @@
++"""
++Translocatome Adapter for BioCypher.
++
++Loads Translocatome protein translocation data and generates:
++- ProteinTranslocation edges (protein → translocation with confidence)
++
++Translocatome catalogs proteins that translocate between subcellular
++compartments, with localization scores and translocation confidence.
++"""
++
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class TranslocatomeAdapter:
++    def __init__(self, data_dir="template_package/data/translocatome"):
++        self.data_dir = Path(data_dir)
++        self.proteins = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load Translocatome data."""
++        path = self.data_dir / 'all_proteins.json'
++        if not path.exists():
++            logger.warning("Translocatome: data file not found")
++            return
++
++        logger.info("Translocatome: Loading translocation data...")
++
++        with open(path, 'r', encoding='utf-8') as f:
++            data = json.load(f)
++
++        count = 0
++        for entry in data:
++            decision = entry.get('decision', '').strip()
++            # Only include translocating proteins
++            if 'non-translocating' in decision or decision == 'N/A':
++                continue
++
++            uniprot = entry.get('uniprotac', '').strip()
++            gene_name = entry.get('gene_name', '').strip()
++            localizations = entry.get('localizations', [])
++            evidence_score = entry.get('evidence_score', 0)
++
++            if not uniprot:
++                continue
++
++            # Parse localizations
++            loc_str = '|'.join(str(l) for l in localizations[:5])
++
++            self.proteins.append({
++                'uniprot': uniprot,
++                'gene_name': gene_name,
++                'decision': decision,
++                'localizations': loc_str,
++                'evidence_score': evidence_score or 0,
++            })
++            count += 1
++
++        logger.info(f"Translocatome: Loaded {count} translocating proteins")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("Translocatome: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate ProteinTranslocation edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("Translocatome: Generating edges...")
++        count = 0
++
++        for prot in self.proteins:
++            props = {
++                'gene_name': prot['gene_name'],
++                'confidence': prot['decision'],
++                'localizations': self._sanitize(prot['localizations']),
++                'evidence_score': prot['evidence_score'],
++                'source': 'Translocatome',
++            }
++
++            yield (
++                None,
++                prot['uniprot'],
++                "TRANSLOCATION",
++                "ProteinTranslocation",
++                props
++            )
++            count += 1
++
++        logger.info(f"Translocatome: Generated {count} ProteinTranslocation edges")
+diff --git a/template_package/adapters/unicarbkb_adapter.py b/template_package/adapters/unicarbkb_adapter.py
+new file mode 100644
+index 0000000..9c824a9
+--- /dev/null
++++ b/template_package/adapters/unicarbkb_adapter.py
+@@ -0,0 +1,148 @@
++"""
++UniCarbKB / GlyGen Glycan Adapter for BioCypher.
++
++Loads glycan structure data from GlyGen (which integrates UniCarbKB data).
++GlyGen is a comprehensive glycoinformatics resource that provides
++standardized glycan data from GlyTouCan, UniCarbKB, and other repositories.
++
++Generates:
++- Glycan nodes (N-linked and other glycan structures)
++"""
++
++import csv
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class UniCarbKBAdapter:
++    def __init__(self, data_dir="template_package/data/unicarbkb"):
++        self.data_dir = Path(data_dir)
++        self.glycans = {}
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load glycan data from GlyGen TSV files."""
++        # Load N-linked glycans (most comprehensive)
++        nlinked_path = self.data_dir / 'glygen_nlinked_glycans.tsv'
++        if nlinked_path.exists():
++            self._load_tsv(nlinked_path, 'N-linked')
++
++        # Load general glycans
++        general_path = self.data_dir / 'glygen_glycans.tsv'
++        if general_path.exists():
++            self._load_tsv(general_path, 'general')
++
++        # Also try JSON files for richer data
++        nlinked_json = self.data_dir / 'glygen_nlinked_glycans.json'
++        if nlinked_json.exists():
++            self._load_json(nlinked_json)
++
++        logger.info(f"UniCarbKB/GlyGen: Loaded {len(self.glycans)} unique glycans")
++
++    def _load_tsv(self, path, glycan_type):
++        """Load glycan data from TSV file."""
++        try:
++            with open(path, 'r', encoding='utf-8') as f:
++                reader = csv.DictReader(f, delimiter='\t')
++                count = 0
++                for row in reader:
++                    acc = row.get('glytoucan_ac', '').strip()
++                    if not acc:
++                        continue
++
++                    if acc not in self.glycans:
++                        self.glycans[acc] = {
++                            'glytoucan_ac': acc,
++                            'mass': row.get('mass', ''),
++                            'glycan_type': glycan_type,
++                            'byonic': row.get('byonic', ''),
++                            'hit_score': row.get('hit_score', ''),
++                            'publication_count': row.get('publication_count', '0'),
++                        }
++                        count += 1
++
++            logger.info(f"UniCarbKB/GlyGen: Loaded {count} glycans from {path.name}")
++        except Exception as e:
++            logger.warning(f"UniCarbKB/GlyGen: Error loading {path.name}: {e}")
++
++    def _load_json(self, path):
++        """Load additional glycan data from JSON for richer properties."""
++        try:
++            with open(path, 'r', encoding='utf-8') as f:
++                data = json.load(f)
++
++            if isinstance(data, list):
++                for item in data:
++                    acc = item.get('glytoucan_ac', '')
++                    if not acc:
++                        continue
++                    if acc in self.glycans:
++                        # Enrich existing entry
++                        if 'mass' in item and item['mass']:
++                            self.glycans[acc]['mass'] = item['mass']
++                    else:
++                        self.glycans[acc] = {
++                            'glytoucan_ac': acc,
++                            'mass': item.get('mass', ''),
++                            'glycan_type': 'N-linked',
++                            'byonic': item.get('byonic', ''),
++                            'hit_score': item.get('hit_score', ''),
++                            'publication_count': str(item.get('publication_count', 0)),
++                        }
++        except Exception as e:
++            logger.warning(f"UniCarbKB/GlyGen: Error loading JSON: {e}")
++
++    def get_nodes(self):
++        """
++        Generate Glycan nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("UniCarbKB/GlyGen: Generating glycan nodes...")
++        count = 0
++
++        for acc, glycan in self.glycans.items():
++            mass_str = str(glycan.get('mass', '')).strip()
++            try:
++                mass = float(mass_str) if mass_str else 0.0
++            except ValueError:
++                mass = 0.0
++
++            hit_score_str = str(glycan.get('hit_score', '')).strip()
++            try:
++                hit_score = float(hit_score_str) if hit_score_str else 0.0
++            except ValueError:
++                hit_score = 0.0
++
++            pub_str = str(glycan.get('publication_count', '0')).strip()
++            try:
++                pub_count = int(pub_str) if pub_str else 0
++            except ValueError:
++                pub_count = 0
++
++            props = {
++                'composition': self._sanitize(glycan.get('byonic', '')),
++                'mass': mass,
++                'glycan_type': glycan.get('glycan_type', ''),
++                'hit_score': hit_score,
++                'publication_count': pub_count,
++                'source': 'GlyGen/UniCarbKB',
++            }
++
++            yield (acc, "Glycan", props)
++            count += 1
++
++        logger.info(f"UniCarbKB/GlyGen: Generated {count} glycan nodes")
++
++    def get_edges(self):
++        """No edges - glycan-protein links from GlyGen require additional data."""
++        logger.info("UniCarbKB/GlyGen: No edges to generate")
++        return iter([])
+diff --git a/todo.md b/todo.md
+index 492a934..0e5f3d2 100644
+--- a/todo.md
++++ b/todo.md
+@@ -1,21 +1,23 @@
+ # TODO - Current Work Items
+ 
+-## Immediate (This Session)
+-1. [IN PROGRESS] Build ChEBI adapter
+-2. [ ] Build Rhea adapter (TSV-based, Phase 1)
+-3. [ ] Build LIPIDMAPS adapter (SDF parsing)
+-4. [ ] Build KEGG adapter (compounds, reactions, pathways)
+-5. [ ] Update schema_config.yaml with all new entity types
+-6. [ ] Update create_knowledge_graph.py to use all adapters
+-7. [ ] Test pipeline end-to-end
+-8. [ ] Commit all changes
++## Completed
++1. [DONE] All 12 remaining data directories now have adapters:
++   - 3DGenome, Adhesome, BRENDA, ChapNet, ENCORI, EpiMap
++   - EVpedia, LipidOntology (LION), RaftProt, SILVA, TarBase/miRDB, UniCarbKB
++2. [DONE] Schema config updated (102 entries)
++3. [DONE] create_knowledge_graph.py updated (65 adapters)
+ 
+-## Next Phase
+-9. [ ] Download and integrate additional databases from task.md list
+-10. [ ] InterPro (protein families/domains)
+-11. [ ] IntAct (molecular interactions)
+-12. [ ] ComplexPortal (protein complexes)
+-13. [ ] Human Protein Atlas (expression, localization)
+-14. [ ] STRING (protein-protein interactions)
+-15. [ ] Reactome (pathways)
+-16. [ ] ENCODE/SCREEN (regulatory elements)
++## Next Steps
++1. [ ] Run end-to-end pipeline test (docker compose up)
++2. [ ] Verify all adapters load successfully
++3. [ ] Check for cross-reference linking opportunities between databases
++4. [ ] Add more neuroscience databases from task.md list:
++   - mousebrain.org (single-cell atlas)
++   - Allen Brain Atlas ABC Atlas (additional data)
++   - eMouse atlas
++   - SynGO portal (additional data)
++   - PsychENCODE (additional data layers)
++5. [ ] Consider adding adapters for databases referenced by papers/URLs in task.md
++   that don't yet have downloaded data
++6. [ ] Optimize adapter loading for large datasets (EpiMap, TarBase)
++7. [ ] Add more cross-linking edges between entities from different databases

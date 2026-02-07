@@ -1,0 +1,809 @@
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index 4f34c17..04efedc 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -1610,3 +1610,99 @@ clinvar variant:
+     phenotype: str
+     review_status: str
+     source: str
++
++# ============================================================
++# REDIportal (RNA Editing Sites)
++# ============================================================
++
++rna editing site:
++  is_a: sequence variant
++  represented_as: node
++  preferred_id: rediportal
++  input_label: RNAEditingSite
++  properties:
++    chromosome: str
++    position: str
++    ref_base: str
++    edited_base: str
++    strand: str
++    repeat_type: str
++    functional_region: str
++    gene: str
++    gene_id: str
++    n_samples: int
++    n_tissues: int
++    dbsnp: str
++    source: str
++
++# ============================================================
++# NeuroMorpho (Neuron Morphology)
++# ============================================================
++
++neuron morphology:
++  is_a: named thing
++  represented_as: node
++  preferred_id: neuromorpho
++  input_label: NeuronMorphology
++  properties:
++    neuron_name: str
++    archive: str
++    brain_region: str
++    cell_type: str
++    gender: str
++    age_classification: str
++    stain: str
++    protocol: str
++    reconstruction_software: str
++    soma_surface: str
++    surface: str
++    volume: str
++    physical_integrity: str
++    source: str
++
++# ============================================================
++# OmniPath (Signaling Network)
++# ============================================================
++
++signaling interaction:
++  is_a: pairwise molecular interaction
++  represented_as: edge
++  input_label: SignalingInteraction
++  properties:
++    source_gene: str
++    target_gene: str
++    is_directed: str
++    is_stimulation: str
++    is_inhibition: str
++    databases: str
++    source: str
++
++# ============================================================
++# TISSUES (Tissue Expression - JensenLab)
++# ============================================================
++
++tissue expression:
++  is_a: association
++  represented_as: edge
++  input_label: TissueExpression
++  properties:
++    gene_symbol: str
++    tissue_name: str
++    evidence_source: str
++    confidence: str
++    score: float
++    source: str
++
++# ============================================================
++# Bgee (Gene Expression)
++# ============================================================
++
++gene expression:
++  is_a: association
++  represented_as: edge
++  input_label: GeneExpression
++  properties:
++    gene_name: str
++    anatomical_entity: str
++    expression_score: float
++    source: str
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index be9efab..2605107 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -701,6 +701,46 @@ try:
+ except Exception as e:
+     logger.warning(f"Could not load ClinVar adapter: {e}")
+ 
++# --- REDIportal (RNA Editing Sites) ---
++try:
++    from template_package.adapters.rediportal_adapter import REDIportalAdapter
++    adapters.append(("REDIportal", REDIportalAdapter()))
++    logger.info("Loaded REDIportal adapter")
++except Exception as e:
++    logger.warning(f"Could not load REDIportal adapter: {e}")
++
++# --- NeuroMorpho (Neuron Morphology) ---
++try:
++    from template_package.adapters.neuromorpho_adapter import NeuroMorphoAdapter
++    adapters.append(("NeuroMorpho", NeuroMorphoAdapter()))
++    logger.info("Loaded NeuroMorpho adapter")
++except Exception as e:
++    logger.warning(f"Could not load NeuroMorpho adapter: {e}")
++
++# --- OmniPath (Signaling Network) ---
++try:
++    from template_package.adapters.omnipath_adapter import OmniPathAdapter
++    adapters.append(("OmniPath", OmniPathAdapter()))
++    logger.info("Loaded OmniPath adapter")
++except Exception as e:
++    logger.warning(f"Could not load OmniPath adapter: {e}")
++
++# --- TISSUES (Tissue Expression) ---
++try:
++    from template_package.adapters.tissues_adapter import TISSUESAdapter
++    adapters.append(("TISSUES", TISSUESAdapter()))
++    logger.info("Loaded TISSUES adapter")
++except Exception as e:
++    logger.warning(f"Could not load TISSUES adapter: {e}")
++
++# --- Bgee (Gene Expression) ---
++try:
++    from template_package.adapters.bgee_adapter import BgeeAdapter
++    adapters.append(("Bgee", BgeeAdapter()))
++    logger.info("Loaded Bgee adapter")
++except Exception as e:
++    logger.warning(f"Could not load Bgee adapter: {e}")
++
+ # ============================================================
+ # 3. Write nodes and edges from all adapters
+ # ============================================================
+diff --git a/template_package/adapters/bgee_adapter.py b/template_package/adapters/bgee_adapter.py
+new file mode 100644
+index 0000000..8e85b4d
+--- /dev/null
++++ b/template_package/adapters/bgee_adapter.py
+@@ -0,0 +1,121 @@
++"""
++Bgee Adapter for BioCypher.
++
++Loads Bgee gene expression calls for human and generates:
++- GeneExpression edges (gene → anatomical entity expression)
++
++Bgee provides gene expression data across multiple animal species,
++integrating RNA-seq, Affymetrix, in situ hybridization, and EST data.
++"""
++
++import gzip
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class BgeeAdapter:
++    def __init__(self, data_dir="template_package/data/bgee"):
++        self.data_dir = Path(data_dir)
++        self.expressions = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load Bgee human expression calls."""
++        path = self.data_dir / 'bgee_human_expr.tsv.gz'
++        if not path.exists():
++            logger.warning("Bgee: data file not found")
++            return
++
++        logger.info("Bgee: Loading human gene expression calls...")
++        count = 0
++        seen = set()
++        max_entries = 500000  # Cap for memory management
++
++        try:
++            with gzip.open(path, 'rt', encoding='utf-8') as f:
++                reader = csv.DictReader(f, delimiter='\t')
++                for row in reader:
++                    gene_id = (row.get('Gene ID') or '').strip()
++                    gene_name = (row.get('Gene name') or '').strip().strip('"')
++                    anat_id = (row.get('Anatomical entity ID') or '').strip()
++                    anat_name = (row.get('Anatomical entity name') or '').strip().strip('"')
++                    expression = (row.get('Expression') or '').strip()
++                    quality = (row.get('Call quality') or '').strip()
++                    score = (row.get('Expression score') or '').strip()
++
++                    if not gene_id or not anat_id:
++                        continue
++
++                    # Only include present expression calls with gold quality
++                    if expression != 'present':
++                        continue
++                    if quality != 'gold quality':
++                        continue
++
++                    key = (gene_id, anat_id)
++                    if key in seen:
++                        continue
++                    seen.add(key)
++
++                    try:
++                        score_float = float(score)
++                    except ValueError:
++                        score_float = 0.0
++
++                    self.expressions.append({
++                        'gene_id': gene_id,
++                        'gene_name': gene_name,
++                        'anat_id': anat_id,
++                        'anat_name': anat_name,
++                        'score': score_float,
++                    })
++                    count += 1
++
++                    if count >= max_entries:
++                        break
++
++        except EOFError:
++            logger.warning(f"Bgee: Truncated gzip, loaded {count} entries")
++
++        logger.info(f"Bgee: Loaded {count} gold-quality expression calls")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("Bgee: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate GeneExpression edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("Bgee: Generating edges...")
++        count = 0
++
++        for expr in self.expressions:
++            props = {
++                'gene_name': self._sanitize(expr['gene_name']),
++                'anatomical_entity': self._sanitize(expr['anat_name']),
++                'expression_score': expr['score'],
++                'source': 'Bgee',
++            }
++
++            yield (
++                None,
++                expr['gene_id'],
++                expr['anat_id'],
++                "GeneExpression",
++                props
++            )
++            count += 1
++
++        logger.info(f"Bgee: Generated {count} GeneExpression edges")
+diff --git a/template_package/adapters/neuromorpho_adapter.py b/template_package/adapters/neuromorpho_adapter.py
+new file mode 100644
+index 0000000..5b578fe
+--- /dev/null
++++ b/template_package/adapters/neuromorpho_adapter.py
+@@ -0,0 +1,126 @@
++"""
++NeuroMorpho Adapter for BioCypher.
++
++Loads NeuroMorpho.org human neuron morphology data and generates:
++- NeuronMorphology nodes (digitally reconstructed neuron morphologies)
++
++NeuroMorpho.org is the largest collection of publicly accessible
++3D neuronal reconstructions, with detailed metadata on cell type,
++brain region, species, and morphometric measurements.
++"""
++
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class NeuroMorphoAdapter:
++    def __init__(self, data_dir="template_package/data/neuromorpho"):
++        self.data_dir = Path(data_dir)
++        self.neurons = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load NeuroMorpho human neuron data from JSON files."""
++        json_files = sorted(self.data_dir.glob('neuromorpho_human*.json'))
++        if not json_files:
++            logger.warning("NeuroMorpho: No data files found")
++            return
++
++        logger.info(f"NeuroMorpho: Loading from {len(json_files)} JSON files...")
++        count = 0
++        seen = set()
++
++        for jf in json_files:
++            try:
++                with open(jf, 'r', encoding='utf-8') as f:
++                    data = json.load(f)
++            except (json.JSONDecodeError, IOError) as e:
++                logger.warning(f"NeuroMorpho: Error reading {jf.name}: {e}")
++                continue
++
++            # Handle HAL-style API response
++            if isinstance(data, dict) and '_embedded' in data:
++                neurons = data['_embedded'].get('neuronResources', [])
++            elif isinstance(data, list):
++                neurons = data
++            else:
++                continue
++
++            for neuron in neurons:
++                nid = neuron.get('neuron_id')
++                if nid is None or nid in seen:
++                    continue
++                seen.add(nid)
++
++                brain_region = neuron.get('brain_region', [])
++                if isinstance(brain_region, list):
++                    brain_region = '; '.join(brain_region)
++
++                cell_type = neuron.get('cell_type', [])
++                if isinstance(cell_type, list):
++                    cell_type = '; '.join(cell_type)
++
++                self.neurons.append({
++                    'neuron_id': str(nid),
++                    'neuron_name': neuron.get('neuron_name', ''),
++                    'archive': neuron.get('archive', ''),
++                    'brain_region': brain_region,
++                    'cell_type': cell_type,
++                    'gender': neuron.get('gender', ''),
++                    'age_classification': neuron.get('age_classification', ''),
++                    'stain': neuron.get('stain', ''),
++                    'protocol': neuron.get('protocol', ''),
++                    'reconstruction_software': neuron.get('reconstruction_software', ''),
++                    'soma_surface': neuron.get('soma_surface', ''),
++                    'surface': neuron.get('surface', ''),
++                    'volume': neuron.get('volume', ''),
++                    'physical_integrity': neuron.get('physical_Integrity', ''),
++                })
++                count += 1
++
++        logger.info(f"NeuroMorpho: Loaded {count} human neuron morphologies")
++
++    def get_nodes(self):
++        """
++        Generate NeuronMorphology nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("NeuroMorpho: Generating nodes...")
++        count = 0
++
++        for neuron in self.neurons:
++            props = {
++                'neuron_name': self._sanitize(neuron['neuron_name']),
++                'archive': self._sanitize(neuron['archive']),
++                'brain_region': self._sanitize(neuron['brain_region']),
++                'cell_type': self._sanitize(neuron['cell_type']),
++                'gender': self._sanitize(neuron['gender']),
++                'age_classification': self._sanitize(neuron['age_classification']),
++                'stain': self._sanitize(neuron['stain']),
++                'protocol': self._sanitize(neuron['protocol']),
++                'reconstruction_software': self._sanitize(neuron['reconstruction_software']),
++                'soma_surface': self._sanitize(neuron['soma_surface']),
++                'surface': self._sanitize(neuron['surface']),
++                'volume': self._sanitize(neuron['volume']),
++                'physical_integrity': self._sanitize(neuron['physical_integrity']),
++                'source': 'NeuroMorpho',
++            }
++
++            yield (f"neuromorpho:{neuron['neuron_id']}", "NeuronMorphology", props)
++            count += 1
++
++        logger.info(f"NeuroMorpho: Generated {count} NeuronMorphology nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("NeuroMorpho: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/omnipath_adapter.py b/template_package/adapters/omnipath_adapter.py
+new file mode 100644
+index 0000000..6b7e3c0
+--- /dev/null
++++ b/template_package/adapters/omnipath_adapter.py
+@@ -0,0 +1,108 @@
++"""
++OmniPath Adapter for BioCypher.
++
++Loads OmniPath signaling network interactions and generates:
++- SignalingInteraction edges (protein → protein signaling)
++
++OmniPath is a comprehensive collection of literature-curated
++signaling pathway resources, integrating data from >100 databases.
++"""
++
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class OmniPathAdapter:
++    def __init__(self, data_dir="template_package/data/omnipath"):
++        self.data_dir = Path(data_dir)
++        self.interactions = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load OmniPath signaling interactions."""
++        path = self.data_dir / 'omnipath_interactions.tsv'
++        if not path.exists():
++            logger.warning("OmniPath: interactions file not found")
++            return
++
++        logger.info("OmniPath: Loading signaling interactions...")
++        count = 0
++        seen = set()
++
++        with open(path, 'r', encoding='utf-8') as f:
++            reader = csv.DictReader(f, delimiter='\t')
++            for row in reader:
++                source = (row.get('source') or '').strip()
++                target = (row.get('target') or '').strip()
++                source_gene = (row.get('source_genesymbol') or '').strip()
++                target_gene = (row.get('target_genesymbol') or '').strip()
++                is_directed = (row.get('is_directed') or '').strip()
++                is_stimulation = (row.get('is_stimulation') or '').strip()
++                is_inhibition = (row.get('is_inhibition') or '').strip()
++                sources = (row.get('sources') or '').strip()
++
++                if not source or not target:
++                    continue
++
++                key = (source, target)
++                if key in seen:
++                    continue
++                seen.add(key)
++
++                self.interactions.append({
++                    'source': source,
++                    'target': target,
++                    'source_gene': source_gene,
++                    'target_gene': target_gene,
++                    'is_directed': is_directed,
++                    'is_stimulation': is_stimulation,
++                    'is_inhibition': is_inhibition,
++                    'sources': sources,
++                })
++                count += 1
++
++        logger.info(f"OmniPath: Loaded {count} signaling interactions")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("OmniPath: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate SignalingInteraction edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("OmniPath: Generating edges...")
++        count = 0
++
++        for ix in self.interactions:
++            props = {
++                'source_gene': self._sanitize(ix['source_gene']),
++                'target_gene': self._sanitize(ix['target_gene']),
++                'is_directed': ix['is_directed'],
++                'is_stimulation': ix['is_stimulation'],
++                'is_inhibition': ix['is_inhibition'],
++                'databases': self._sanitize(ix['sources'][:200]),
++                'source': 'OmniPath',
++            }
++
++            yield (
++                None,
++                ix['source'],
++                ix['target'],
++                "SignalingInteraction",
++                props
++            )
++            count += 1
++
++        logger.info(f"OmniPath: Generated {count} SignalingInteraction edges")
+diff --git a/template_package/adapters/rediportal_adapter.py b/template_package/adapters/rediportal_adapter.py
+new file mode 100644
+index 0000000..d778a56
+--- /dev/null
++++ b/template_package/adapters/rediportal_adapter.py
+@@ -0,0 +1,157 @@
++"""
++REDIportal Adapter for BioCypher.
++
++Loads REDIportal v3 human RNA editing sites (hg38) and generates:
++- RNAEditingSite nodes (A-to-I RNA editing events)
++
++REDIportal is the largest database of RNA editing in humans,
++cataloging millions of A-to-I editing sites from multiple tissues.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class REDIportalAdapter:
++    def __init__(self, data_dir="template_package/data/rediportal"):
++        self.data_dir = Path(data_dir)
++        self.sites = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load REDIportal RNA editing sites."""
++        path = self.data_dir / 'rediportal_hg38_v3.txt.gz'
++        if not path.exists():
++            logger.warning("REDIportal: data file not found")
++            return
++
++        logger.info("REDIportal: Loading RNA editing sites...")
++        count = 0
++        seen = set()
++        max_sites = 500000  # Cap for memory management
++
++        try:
++            with gzip.open(path, 'rt', encoding='utf-8') as f:
++                header = None
++                for line in f:
++                    parts = line.strip().split('\t')
++                    if header is None:
++                        header = parts
++                        continue
++
++                    if len(parts) < 30:
++                        continue
++
++                    accession = parts[0].strip()
++                    region = parts[1].strip()      # chromosome
++                    position = parts[2].strip()     # genomic position
++                    ref = parts[3].strip()          # reference base
++                    ed = parts[4].strip()           # edited base
++                    strand = parts[5].strip()
++                    db_source = parts[6].strip()    # A=ATLAS, D=DARNED
++                    repeat_type = parts[7].strip()  # ALU, nonALU, nonREP
++                    dbsnp = parts[8].strip()
++
++                    # Gene annotation from GENCODE
++                    func_region = parts[10].strip() if len(parts) > 10 else ''
++                    gene = parts[11].strip() if len(parts) > 11 else ''
++
++                    # Tissue/sample counts
++                    n_samples = parts[23].strip() if len(parts) > 23 else '0'
++                    n_tissues = parts[24].strip() if len(parts) > 24 else '0'
++
++                    # Gene IDs
++                    gene_id = parts[29].strip() if len(parts) > 29 else ''
++
++                    if not accession or not region:
++                        continue
++
++                    # Deduplicate by accession
++                    if accession in seen:
++                        continue
++                    seen.add(accession)
++
++                    try:
++                        n_samples_int = int(n_samples)
++                    except ValueError:
++                        n_samples_int = 0
++
++                    try:
++                        n_tissues_int = int(n_tissues)
++                    except ValueError:
++                        n_tissues_int = 0
++
++                    # Prioritize well-supported sites (observed in multiple samples)
++                    # For the capped set, only include sites seen in 2+ samples
++                    if count >= 100000 and n_samples_int < 2:
++                        continue
++
++                    self.sites.append({
++                        'accession': accession,
++                        'chromosome': region,
++                        'position': position,
++                        'ref': ref,
++                        'ed': ed,
++                        'strand': strand,
++                        'db_source': db_source,
++                        'repeat_type': repeat_type,
++                        'dbsnp': dbsnp,
++                        'func_region': func_region,
++                        'gene': gene,
++                        'gene_id': gene_id,
++                        'n_samples': n_samples_int,
++                        'n_tissues': n_tissues_int,
++                    })
++                    count += 1
++
++                    if count >= max_sites:
++                        break
++
++        except EOFError:
++            logger.warning(f"REDIportal: Truncated gzip, loaded {count} sites")
++
++        logger.info(f"REDIportal: Loaded {count} RNA editing sites")
++
++    def get_nodes(self):
++        """
++        Generate RNAEditingSite nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("REDIportal: Generating nodes...")
++        count = 0
++
++        for site in self.sites:
++            props = {
++                'chromosome': site['chromosome'],
++                'position': site['position'],
++                'ref_base': site['ref'],
++                'edited_base': site['ed'],
++                'strand': site['strand'],
++                'repeat_type': self._sanitize(site['repeat_type']),
++                'functional_region': self._sanitize(site['func_region']),
++                'gene': self._sanitize(site['gene']),
++                'gene_id': self._sanitize(site['gene_id']),
++                'n_samples': site['n_samples'],
++                'n_tissues': site['n_tissues'],
++                'dbsnp': self._sanitize(site['dbsnp']),
++                'source': 'REDIportal_v3',
++            }
++
++            yield (site['accession'], "RNAEditingSite", props)
++            count += 1
++
++        logger.info(f"REDIportal: Generated {count} RNAEditingSite nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("REDIportal: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/tissues_adapter.py b/template_package/adapters/tissues_adapter.py
+new file mode 100644
+index 0000000..5320b59
+--- /dev/null
++++ b/template_package/adapters/tissues_adapter.py
+@@ -0,0 +1,112 @@
++"""
++TISSUES Adapter for BioCypher.
++
++Loads JensenLab TISSUES tissue expression data and generates:
++- TissueExpression edges (protein → tissue expression associations)
++
++TISSUES integrates evidence on tissue expression from experiments,
++text mining, knowledge bases, and predictions.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class TISSUESAdapter:
++    def __init__(self, data_dir="template_package/data/tissues"):
++        self.data_dir = Path(data_dir)
++        self.associations = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load TISSUES expression data."""
++        path = self.data_dir / 'human_tissue_knowledge.tsv'
++        if not path.exists():
++            logger.warning("TISSUES: data file not found")
++            return
++
++        logger.info("TISSUES: Loading tissue expression data...")
++        count = 0
++        seen = set()
++
++        with open(path, 'r', encoding='utf-8') as f:
++            for line in f:
++                parts = line.strip().split('\t')
++                if len(parts) < 7:
++                    continue
++
++                ensp = parts[0].strip()
++                gene = parts[1].strip()
++                tissue_id = parts[2].strip()
++                tissue_name = parts[3].strip()
++                evidence_source = parts[4].strip()
++                confidence = parts[5].strip()
++                score = parts[6].strip()
++
++                if not ensp or not tissue_id:
++                    continue
++
++                key = (ensp, tissue_id)
++                if key in seen:
++                    continue
++                seen.add(key)
++
++                try:
++                    score_float = float(score)
++                except ValueError:
++                    score_float = 0.0
++
++                self.associations.append({
++                    'ensp': ensp,
++                    'gene': gene,
++                    'tissue_id': tissue_id,
++                    'tissue_name': tissue_name,
++                    'evidence_source': evidence_source,
++                    'confidence': confidence,
++                    'score': score_float,
++                })
++                count += 1
++
++        logger.info(f"TISSUES: Loaded {count} protein-tissue associations")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("TISSUES: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate TissueExpression edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("TISSUES: Generating edges...")
++        count = 0
++
++        for assoc in self.associations:
++            props = {
++                'gene_symbol': self._sanitize(assoc['gene']),
++                'tissue_name': self._sanitize(assoc['tissue_name']),
++                'evidence_source': self._sanitize(assoc['evidence_source']),
++                'confidence': self._sanitize(assoc['confidence']),
++                'score': assoc['score'],
++                'source': 'TISSUES_JensenLab',
++            }
++
++            yield (
++                None,
++                assoc['ensp'],
++                assoc['tissue_id'],
++                "TissueExpression",
++                props
++            )
++            count += 1
++
++        logger.info(f"TISSUES: Generated {count} TissueExpression edges")

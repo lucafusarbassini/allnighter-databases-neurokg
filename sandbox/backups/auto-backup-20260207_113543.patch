@@ -1,0 +1,1146 @@
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index 09ed54b..e9a79b4 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -187,3 +187,124 @@ reaction in pathway:
+   is_a: related to
+   represented_as: edge
+   input_label: ReactionInPathway
++
++# ============================================================
++# ComplexPortal (Protein Complexes)
++# ============================================================
++
++protein complex:
++  is_a: macromolecular complex
++  represented_as: node
++  preferred_id: complexportal
++  input_label: ProteinComplex
++  properties:
++    name: str
++    aliases: str
++    description: str
++    complex_assembly: str
++    species: str
++    go_annotations: str[]
++    num_components: int
++
++complex contains protein:
++  is_a: related to
++  represented_as: edge
++  input_label: ComplexContainsProtein
++  properties:
++    stoichiometry: int
++    species: str
++    original_id: str
++
++# ============================================================
++# InterPro (Protein Families and Domains)
++# ============================================================
++
++interpro entry:
++  is_a: polypeptide region
++  represented_as: node
++  preferred_id: interpro
++  input_label: InterProEntry
++  properties:
++    name: str
++    short_name: str
++    entry_type: str
++    go_terms: str[]
++
++interpro child of:
++  is_a: subclass of
++  represented_as: edge
++  input_label: InterProChildOf
++
++# ============================================================
++# STRING (Protein-Protein Interactions)
++# ============================================================
++
++protein interaction:
++  is_a: pairwise molecular interaction
++  represented_as: edge
++  input_label: ProteinInteraction
++  properties:
++    combined_score: int
++    source_db: str
++
++# ============================================================
++# Reactome (Biological Pathways)
++# ============================================================
++
++reactome pathway:
++  is_a: pathway
++  represented_as: node
++  preferred_id: reactome
++  input_label: ReactomePathway
++  properties:
++    name: str
++    url: str
++    source: str
++
++gene participates in pathway:
++  is_a: related to
++  represented_as: edge
++  input_label: GeneParticipatesInPathway
++  properties:
++    evidence: str
++    source: str
++
++# ============================================================
++# Human Protein Atlas (Expression & Localization)
++# ============================================================
++
++subcellular location:
++  is_a: cellular component
++  represented_as: node
++  preferred_id: go
++  input_label: SubcellularLocation
++  properties:
++    name: str
++    go_id: str
++    source: str
++
++tissue:
++  is_a: gross anatomical structure
++  represented_as: node
++  preferred_id: hpa
++  input_label: Tissue
++  properties:
++    name: str
++    source: str
++
++gene localized to:
++  is_a: related to
++  represented_as: edge
++  input_label: GeneLocalizedTo
++  properties:
++    location_type: str
++    reliability: str
++
++gene expressed in:
++  is_a: related to
++  represented_as: edge
++  input_label: GeneExpressedIn
++  properties:
++    level: str
++    reliability: str
++    source: str
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index 86e0d5c..a8d5408 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -60,6 +60,46 @@ try:
+ except Exception as e:
+     logger.warning(f"Could not load KEGG adapter: {e}")
+ 
++# --- ComplexPortal (Protein Complexes) ---
++try:
++    from template_package.adapters.complexportal_adapter import ComplexPortalAdapter
++    adapters.append(("ComplexPortal", ComplexPortalAdapter()))
++    logger.info("Loaded ComplexPortal adapter")
++except Exception as e:
++    logger.warning(f"Could not load ComplexPortal adapter: {e}")
++
++# --- InterPro (Protein Families and Domains) ---
++try:
++    from template_package.adapters.interpro_adapter import InterProAdapter
++    adapters.append(("InterPro", InterProAdapter()))
++    logger.info("Loaded InterPro adapter")
++except Exception as e:
++    logger.warning(f"Could not load InterPro adapter: {e}")
++
++# --- STRING (Protein-Protein Interactions) ---
++try:
++    from template_package.adapters.string_adapter import STRINGAdapter
++    adapters.append(("STRING", STRINGAdapter()))
++    logger.info("Loaded STRING adapter")
++except Exception as e:
++    logger.warning(f"Could not load STRING adapter: {e}")
++
++# --- Reactome (Biological Pathways) ---
++try:
++    from template_package.adapters.reactome_adapter import ReactomeAdapter
++    adapters.append(("Reactome", ReactomeAdapter()))
++    logger.info("Loaded Reactome adapter")
++except Exception as e:
++    logger.warning(f"Could not load Reactome adapter: {e}")
++
++# --- Human Protein Atlas (Expression & Localization) ---
++try:
++    from template_package.adapters.hpa_adapter import HPAAdapter
++    adapters.append(("HPA", HPAAdapter()))
++    logger.info("Loaded HPA adapter")
++except Exception as e:
++    logger.warning(f"Could not load HPA adapter: {e}")
++
+ # ============================================================
+ # 3. Write nodes and edges from all adapters
+ # ============================================================
+diff --git a/template_package/adapters/complexportal_adapter.py b/template_package/adapters/complexportal_adapter.py
+new file mode 100644
+index 0000000..e6c728e
+--- /dev/null
++++ b/template_package/adapters/complexportal_adapter.py
+@@ -0,0 +1,198 @@
++"""
++ComplexPortal Adapter for BioCypher.
++
++Loads curated protein complex data from ComplexPortal TSV files and generates:
++- ProteinComplex nodes (macromolecular complexes)
++- ComplexContainsProtein edges (complex → gene with stoichiometry)
++"""
++
++import re
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class ComplexPortalAdapter:
++    def __init__(self, data_dir="template_package/data/complexportal",
++                 ortholog_file="template_package/mappings/mouse_to_human_orthologs.json"):
++        self.data_dir = data_dir
++        self.complexes = []
++        self.orthologs = {}
++        self._load_orthologs(ortholog_file)
++        self._load_data()
++
++    def _sanitize(self, text):
++        """Sanitize string for CSV safety."""
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_orthologs(self, path):
++        """Load mouse-to-human ortholog mappings."""
++        try:
++            with open(path, 'r') as f:
++                self.orthologs = json.load(f)
++            logger.info(f"ComplexPortal: Loaded {len(self.orthologs)} ortholog mappings")
++        except FileNotFoundError:
++            logger.warning(f"ComplexPortal: Ortholog file not found: {path}")
++
++    def _parse_components(self, components_str):
++        """
++        Parse component string like 'P84022(1)|Q13485(1)|Q15796(1)'.
++        Returns list of (uniprot_id, stoichiometry) tuples.
++        """
++        components = []
++        if not components_str or components_str == '-':
++            return components
++
++        for part in components_str.split('|'):
++            part = part.strip()
++            if not part:
++                continue
++            # Match pattern: UNIPROT_ID(stoichiometry) or just UNIPROT_ID
++            match = re.match(r'([A-Z0-9_-]+)\((\d+)\)', part)
++            if match:
++                uid = match.group(1)
++                stoich = int(match.group(2))
++                components.append((uid, stoich))
++            else:
++                # Just a bare ID
++                components.append((part, 1))
++
++        return components
++
++    def _parse_go_annotations(self, go_str):
++        """Parse GO annotation string like 'GO:0071144(name)|GO:0003690(name)'."""
++        go_terms = []
++        if not go_str or go_str == '-':
++            return go_terms
++
++        for part in go_str.split('|'):
++            match = re.match(r'(GO:\d+)', part.strip())
++            if match:
++                go_terms.append(match.group(1))
++
++        return go_terms
++
++    def _load_data(self):
++        """Load ComplexPortal TSV files for human and mouse."""
++        for species_file, species_name, taxid in [
++            ('homo_sapiens.tsv', 'Homo sapiens', '9606'),
++            ('mus_musculus.tsv', 'Mus musculus', '10090'),
++        ]:
++            filepath = Path(self.data_dir) / species_file
++            if not filepath.exists():
++                logger.warning(f"ComplexPortal: {species_file} not found, skipping")
++                continue
++
++            logger.info(f"ComplexPortal: Loading {species_file}...")
++            with open(filepath, 'r', encoding='utf-8') as f:
++                header = None
++                for line in f:
++                    if line.startswith('#'):
++                        # Parse header
++                        header = line.lstrip('#').strip().split('\t')
++                        continue
++                    if not line.strip():
++                        continue
++
++                    fields = line.strip().split('\t')
++                    if len(fields) < 10:
++                        continue
++
++                    complex_data = {
++                        'complex_ac': fields[0].strip(),
++                        'name': self._sanitize(fields[1].strip()),
++                        'aliases': self._sanitize(fields[2].strip()) if len(fields) > 2 else '',
++                        'taxid': taxid,
++                        'species': species_name,
++                        'components_str': fields[4].strip() if len(fields) > 4 else '',
++                        'go_annotations': self._parse_go_annotations(
++                            fields[7].strip() if len(fields) > 7 else ''),
++                        'description': self._sanitize(
++                            fields[9].strip() if len(fields) > 9 else ''),
++                        'complex_assembly': self._sanitize(
++                            fields[11].strip() if len(fields) > 11 else ''),
++                    }
++
++                    # Parse components
++                    complex_data['components'] = self._parse_components(
++                        complex_data['components_str'])
++
++                    self.complexes.append(complex_data)
++
++        logger.info(f"ComplexPortal: Loaded {len(self.complexes)} complexes total")
++
++    def _map_to_human(self, uniprot_id, species):
++        """Map a protein ID to human ortholog if mouse."""
++        if species == 'Mus musculus':
++            return self.orthologs.get(uniprot_id, uniprot_id)
++        return uniprot_id
++
++    def get_nodes(self):
++        """
++        Generate ProteinComplex nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("ComplexPortal: Generating nodes...")
++        node_count = 0
++
++        # Also collect unique Gene nodes from complex components
++        gene_nodes = set()
++
++        for cpx in self.complexes:
++            props = {
++                'name': cpx['name'],
++                'aliases': cpx['aliases'],
++                'description': cpx['description'],
++                'complex_assembly': cpx['complex_assembly'],
++                'species': cpx['species'],
++                'go_annotations': cpx['go_annotations'],
++                'num_components': len(cpx['components']),
++            }
++
++            yield (cpx['complex_ac'], "ProteinComplex", props)
++            node_count += 1
++
++            # Track gene nodes (don't yield them - they may already exist from LIANA)
++            for uid, _ in cpx['components']:
++                human_id = self._map_to_human(uid, cpx['species'])
++                gene_nodes.add(human_id)
++
++        logger.info(f"ComplexPortal: Generated {node_count} ProteinComplex nodes "
++                     f"(referencing {len(gene_nodes)} unique genes)")
++
++    def get_edges(self):
++        """
++        Generate ComplexContainsProtein edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("ComplexPortal: Generating edges...")
++        edge_count = 0
++
++        for cpx in self.complexes:
++            for uid, stoich in cpx['components']:
++                human_id = self._map_to_human(uid, cpx['species'])
++
++                props = {
++                    'stoichiometry': stoich,
++                    'species': cpx['species'],
++                }
++
++                # If it was a mouse protein, track the original ID
++                if cpx['species'] == 'Mus musculus' and human_id != uid:
++                    props['original_id'] = uid
++
++                yield (
++                    None,
++                    cpx['complex_ac'],
++                    human_id,
++                    "ComplexContainsProtein",
++                    props
++                )
++                edge_count += 1
++
++        logger.info(f"ComplexPortal: Generated {edge_count} ComplexContainsProtein edges")
+diff --git a/template_package/adapters/hpa_adapter.py b/template_package/adapters/hpa_adapter.py
+new file mode 100644
+index 0000000..ab00aa1
+--- /dev/null
++++ b/template_package/adapters/hpa_adapter.py
+@@ -0,0 +1,243 @@
++"""
++Human Protein Atlas (HPA) Adapter for BioCypher.
++
++Loads HPA subcellular localization and tissue expression data and generates:
++- SubcellularLocation nodes (cellular compartments)
++- Tissue nodes (body tissues)
++- GeneLocalizedTo edges (Gene → SubcellularLocation)
++- GeneExpressedIn edges (Gene → Tissue)
++"""
++
++import csv
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class HPAAdapter:
++    def __init__(self, data_dir="template_package/data/hpa"):
++        self.data_dir = data_dir
++        self.gene_to_uniprot = {}  # gene_name -> uniprot_id
++        self.locations = {}  # location_name -> GO_id
++        self.tissues = set()
++        self.localization_data = []
++        self.expression_data = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load HPA data files."""
++        self._load_gene_mapping()
++        self._load_subcellular_location()
++        self._load_tissue_expression()
++
++    def _load_gene_mapping(self):
++        """Load gene name → UniProt mapping from proteinatlas.tsv."""
++        filepath = Path(self.data_dir) / 'proteinatlas.tsv'
++        if not filepath.exists():
++            logger.warning("HPA: proteinatlas.tsv not found")
++            return
++
++        logger.info("HPA: Loading gene-UniProt mappings...")
++        with open(filepath, 'r', encoding='utf-8') as f:
++            reader = csv.DictReader(f, delimiter='\t')
++            for row in reader:
++                gene_name = row.get('Gene', '').strip()
++                uniprot = row.get('Uniprot', '').strip()
++                if gene_name and uniprot:
++                    self.gene_to_uniprot[gene_name] = uniprot
++
++        logger.info(f"HPA: Mapped {len(self.gene_to_uniprot)} genes to UniProt IDs")
++
++    def _load_subcellular_location(self):
++        """Load subcellular location data."""
++        filepath = Path(self.data_dir) / 'subcellular_location.tsv'
++        if not filepath.exists():
++            logger.warning("HPA: subcellular_location.tsv not found")
++            return
++
++        logger.info("HPA: Loading subcellular location data...")
++        with open(filepath, 'r', encoding='utf-8') as f:
++            reader = csv.DictReader(f, delimiter='\t')
++            for row in reader:
++                gene_name = row.get('Gene name', '').strip()
++                reliability = row.get('Reliability', '').strip()
++                main_loc = row.get('Main location', '').strip()
++                additional_loc = row.get('Additional location', '').strip()
++                go_id_str = row.get('GO id', '').strip()
++
++                uniprot_id = self.gene_to_uniprot.get(gene_name)
++                if not uniprot_id:
++                    continue
++
++                # Parse GO IDs from the GO id column
++                # Format: "Cytosol (GO:0005829);Golgi apparatus (GO:0005794)"
++                go_map = {}
++                if go_id_str:
++                    import re
++                    for part in go_id_str.split(';'):
++                        match = re.match(r'(.+?)\s*\((GO:\d+)\)', part.strip())
++                        if match:
++                            loc_name = match.group(1).strip()
++                            go_id = match.group(2)
++                            go_map[loc_name] = go_id
++                            self.locations[loc_name] = go_id
++
++                # Collect all locations
++                all_locs = []
++                if main_loc:
++                    for loc in main_loc.split(';'):
++                        loc = loc.strip()
++                        if loc:
++                            all_locs.append(('main', loc))
++                if additional_loc:
++                    for loc in additional_loc.split(';'):
++                        loc = loc.strip()
++                        if loc:
++                            all_locs.append(('additional', loc))
++
++                for loc_type, loc_name in all_locs:
++                    self.localization_data.append({
++                        'uniprot_id': uniprot_id,
++                        'location': loc_name,
++                        'go_id': go_map.get(loc_name, ''),
++                        'location_type': loc_type,
++                        'reliability': reliability,
++                    })
++
++        logger.info(f"HPA: Loaded {len(self.localization_data)} localization records, "
++                     f"{len(self.locations)} unique locations")
++
++    def _load_tissue_expression(self):
++        """Load tissue expression data (protein level)."""
++        filepath = Path(self.data_dir) / 'normal_tissue.tsv'
++        if not filepath.exists():
++            logger.warning("HPA: normal_tissue.tsv not found")
++            return
++
++        logger.info("HPA: Loading tissue expression data...")
++        count = 0
++        with open(filepath, 'r', encoding='utf-8') as f:
++            reader = csv.DictReader(f, delimiter='\t')
++            for row in reader:
++                gene_name = row.get('Gene name', '').strip()
++                tissue = row.get('Tissue', '').strip()
++                cell_type = row.get('Cell type', '').strip()
++                level = row.get('Level', '').strip()
++                reliability = row.get('Reliability', '').strip()
++
++                uniprot_id = self.gene_to_uniprot.get(gene_name)
++                if not uniprot_id:
++                    continue
++
++                # Only keep detected proteins (Not detected = skip)
++                if level == 'Not detected':
++                    continue
++
++                self.tissues.add(tissue)
++
++                self.expression_data.append({
++                    'uniprot_id': uniprot_id,
++                    'tissue': tissue,
++                    'cell_type': cell_type,
++                    'level': level,
++                    'reliability': reliability,
++                })
++                count += 1
++
++        logger.info(f"HPA: Loaded {count} tissue expression records, "
++                     f"{len(self.tissues)} unique tissues")
++
++    def get_nodes(self):
++        """
++        Generate SubcellularLocation and Tissue nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("HPA: Generating nodes...")
++        loc_count = 0
++        tissue_count = 0
++
++        # SubcellularLocation nodes
++        for loc_name, go_id in self.locations.items():
++            node_id = go_id if go_id else f"HPA:{loc_name.replace(' ', '_')}"
++            props = {
++                'name': self._sanitize(loc_name),
++                'go_id': go_id,
++                'source': 'HPA',
++            }
++            yield (node_id, "SubcellularLocation", props)
++            loc_count += 1
++
++        # Tissue nodes
++        for tissue in sorted(self.tissues):
++            tissue_id = f"HPA_TISSUE:{tissue.replace(' ', '_')}"
++            props = {
++                'name': self._sanitize(tissue),
++                'source': 'HPA',
++            }
++            yield (tissue_id, "Tissue", props)
++            tissue_count += 1
++
++        logger.info(f"HPA: Generated {loc_count} SubcellularLocation, "
++                     f"{tissue_count} Tissue nodes")
++
++    def get_edges(self):
++        """
++        Generate localization and expression edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("HPA: Generating edges...")
++        loc_count = 0
++        expr_count = 0
++
++        # GeneLocalizedTo edges
++        for record in self.localization_data:
++            go_id = record['go_id']
++            loc_id = go_id if go_id else f"HPA:{record['location'].replace(' ', '_')}"
++
++            props = {
++                'location_type': record['location_type'],
++                'reliability': record['reliability'],
++            }
++
++            yield (
++                None,
++                record['uniprot_id'],
++                loc_id,
++                "GeneLocalizedTo",
++                props
++            )
++            loc_count += 1
++
++        # GeneExpressedIn edges (deduplicate by gene+tissue)
++        seen = set()
++        for record in self.expression_data:
++            tissue_id = f"HPA_TISSUE:{record['tissue'].replace(' ', '_')}"
++            key = (record['uniprot_id'], tissue_id)
++            if key in seen:
++                continue
++            seen.add(key)
++
++            props = {
++                'level': record['level'],
++                'reliability': record['reliability'],
++                'source': 'HPA',
++            }
++
++            yield (
++                None,
++                record['uniprot_id'],
++                tissue_id,
++                "GeneExpressedIn",
++                props
++            )
++            expr_count += 1
++
++        logger.info(f"HPA: Generated {loc_count} GeneLocalizedTo, "
++                     f"{expr_count} GeneExpressedIn edges")
+diff --git a/template_package/adapters/interpro_adapter.py b/template_package/adapters/interpro_adapter.py
+new file mode 100644
+index 0000000..77308bb
+--- /dev/null
++++ b/template_package/adapters/interpro_adapter.py
+@@ -0,0 +1,202 @@
++"""
++InterPro Adapter for BioCypher.
++
++Loads InterPro protein family/domain data and generates:
++- InterProEntry nodes (protein families, domains, sites)
++- InterProHierarchy edges (parent-child relationships between entries)
++- InterProToGO edges (InterPro entries → GO terms)
++"""
++
++import re
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class InterProAdapter:
++    def __init__(self, data_dir="template_package/data/interpro"):
++        self.data_dir = data_dir
++        self.entries = {}  # IPR ID -> {type, name, short_name, go_terms: []}
++        self.hierarchy = []  # list of (parent, child)
++        self._load_data()
++
++    def _sanitize(self, text):
++        """Sanitize string for CSV safety."""
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load all InterPro data files."""
++        self._load_entry_list()
++        self._load_names()
++        self._load_hierarchy()
++        self._load_interpro2go()
++
++    def _load_entry_list(self):
++        """Load entry.list file with entry types."""
++        filepath = Path(self.data_dir) / 'entry.list'
++        if not filepath.exists():
++            logger.warning("InterPro: entry.list not found")
++            return
++
++        logger.info("InterPro: Loading entry list...")
++        with open(filepath, 'r') as f:
++            header = f.readline()  # Skip header
++            for line in f:
++                parts = line.strip().split('\t')
++                if len(parts) >= 3:
++                    ipr_id = parts[0].strip()
++                    entry_type = parts[1].strip()
++                    entry_name = self._sanitize(parts[2].strip())
++                    self.entries[ipr_id] = {
++                        'type': entry_type,
++                        'name': entry_name,
++                        'short_name': '',
++                        'go_terms': [],
++                    }
++
++        logger.info(f"InterPro: Loaded {len(self.entries)} entries")
++
++    def _load_names(self):
++        """Load short names from names.dat."""
++        filepath = Path(self.data_dir) / 'names.dat'
++        if not filepath.exists():
++            return
++
++        logger.info("InterPro: Loading short names...")
++        with open(filepath, 'r') as f:
++            for line in f:
++                parts = line.strip().split('\t')
++                if len(parts) >= 2:
++                    ipr_id = parts[0].strip()
++                    short_name = self._sanitize(parts[1].strip())
++                    if ipr_id in self.entries:
++                        self.entries[ipr_id]['short_name'] = short_name
++
++    def _load_hierarchy(self):
++        """Load parent-child hierarchy from ParentChildTreeFile.txt."""
++        filepath = Path(self.data_dir) / 'ParentChildTreeFile.txt'
++        if not filepath.exists():
++            logger.warning("InterPro: ParentChildTreeFile.txt not found")
++            return
++
++        logger.info("InterPro: Loading hierarchy...")
++        # The file uses '--' indentation to show hierarchy
++        # IPR000008::C2 domain::
++        # --IPR014705::Synaptotagmin-17, C2B domain::
++        # ----IPR030537::...
++        parent_stack = []  # stack of (indent_level, ipr_id)
++
++        with open(filepath, 'r') as f:
++            for line in f:
++                line = line.rstrip()
++                if not line:
++                    continue
++
++                # Count leading '--' indentation
++                indent = 0
++                while line[indent * 2:indent * 2 + 2] == '--':
++                    indent += 1
++
++                # Extract IPR ID
++                content = line[indent * 2:]
++                match = re.match(r'(IPR\d+)', content)
++                if not match:
++                    continue
++
++                ipr_id = match.group(1)
++
++                # Find parent at the right level
++                while parent_stack and parent_stack[-1][0] >= indent:
++                    parent_stack.pop()
++
++                if parent_stack:
++                    parent_id = parent_stack[-1][1]
++                    self.hierarchy.append((parent_id, ipr_id))
++
++                parent_stack.append((indent, ipr_id))
++
++        logger.info(f"InterPro: Loaded {len(self.hierarchy)} hierarchy relationships")
++
++    def _load_interpro2go(self):
++        """Load InterPro to GO term mappings."""
++        filepath = Path(self.data_dir) / 'interpro2go'
++        if not filepath.exists():
++            return
++
++        logger.info("InterPro: Loading InterPro2GO mappings...")
++        count = 0
++        with open(filepath, 'r') as f:
++            for line in f:
++                if line.startswith('!') or not line.strip():
++                    continue
++                # Format: InterPro:IPR000001 Kringle > GO:molecular_function ; GO:0003674
++                match = re.match(r'InterPro:(IPR\d+).*>(.*?;\s*(GO:\d+))', line)
++                if match:
++                    ipr_id = match.group(1)
++                    go_id = match.group(3)
++                    if ipr_id in self.entries:
++                        self.entries[ipr_id]['go_terms'].append(go_id)
++                        count += 1
++
++        logger.info(f"InterPro: Loaded {count} GO mappings")
++
++    def get_nodes(self):
++        """
++        Generate InterProEntry nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("InterPro: Generating nodes...")
++        node_count = 0
++
++        # Map InterPro types to BioLink-compatible labels
++        type_map = {
++            'Family': 'ProteinFamily',
++            'Domain': 'ProteinDomain',
++            'Repeat': 'ProteinDomain',
++            'Homologous_superfamily': 'ProteinFamily',
++            'Active_site': 'ProteinDomain',
++            'Binding_site': 'ProteinDomain',
++            'Conserved_site': 'ProteinDomain',
++            'PTM': 'ProteinDomain',
++        }
++
++        for ipr_id, data in self.entries.items():
++            entry_type = data['type']
++            # Use a unified label for all InterPro entries
++            label = "InterProEntry"
++
++            props = {
++                'name': data['name'],
++                'short_name': data['short_name'],
++                'entry_type': entry_type,
++                'go_terms': data['go_terms'],
++            }
++
++            yield (ipr_id, label, props)
++            node_count += 1
++
++        logger.info(f"InterPro: Generated {node_count} InterProEntry nodes")
++
++    def get_edges(self):
++        """
++        Generate hierarchy edges between InterPro entries.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("InterPro: Generating edges...")
++        hier_count = 0
++
++        for parent_id, child_id in self.hierarchy:
++            yield (
++                None,
++                child_id,
++                parent_id,
++                "InterProChildOf",
++                {}
++            )
++            hier_count += 1
++
++        logger.info(f"InterPro: Generated {hier_count} InterProChildOf edges")
+diff --git a/template_package/adapters/reactome_adapter.py b/template_package/adapters/reactome_adapter.py
+new file mode 100644
+index 0000000..7b8ed57
+--- /dev/null
++++ b/template_package/adapters/reactome_adapter.py
+@@ -0,0 +1,127 @@
++"""
++Reactome Pathway Adapter for BioCypher.
++
++Loads Reactome pathway data and generates:
++- ReactomePathway nodes
++- GeneParticipatesInPathway edges (Gene → ReactomePathway)
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class ReactomeAdapter:
++    def __init__(self, data_dir="template_package/data/reactome"):
++        self.data_dir = data_dir
++        self.pathways = {}  # R-HSA-XXXX -> {name, url}
++        self.gene_pathway_links = []  # (uniprot_id, pathway_id, evidence)
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load Reactome UniProt-to-pathway mapping (human only)."""
++        filepath = Path(self.data_dir) / 'UniProt2Reactome_All_Levels.txt'
++        if not filepath.exists():
++            logger.warning("Reactome: UniProt2Reactome file not found")
++            return
++
++        logger.info("Reactome: Loading UniProt-to-pathway mappings (human only)...")
++        total = 0
++        kept = 0
++
++        with open(filepath, 'r', encoding='utf-8') as f:
++            for line in f:
++                parts = line.strip().split('\t')
++                if len(parts) < 6:
++                    continue
++
++                total += 1
++                uniprot_id = parts[0].strip()
++                pathway_id = parts[1].strip()
++                url = parts[2].strip()
++                pathway_name = self._sanitize(parts[3].strip())
++                evidence = parts[4].strip()
++                species = parts[5].strip()
++
++                # Filter: only human pathways (R-HSA-*)
++                if species != 'Homo sapiens':
++                    continue
++                if not pathway_id.startswith('R-HSA-'):
++                    continue
++
++                kept += 1
++
++                # Register pathway
++                if pathway_id not in self.pathways:
++                    self.pathways[pathway_id] = {
++                        'name': pathway_name,
++                        'url': url,
++                    }
++
++                # Register gene-pathway link
++                self.gene_pathway_links.append({
++                    'uniprot_id': uniprot_id,
++                    'pathway_id': pathway_id,
++                    'evidence': evidence,
++                })
++
++        logger.info(f"Reactome: Loaded {len(self.pathways)} human pathways, "
++                     f"{kept} gene-pathway links (from {total} total)")
++
++    def get_nodes(self):
++        """
++        Generate ReactomePathway nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("Reactome: Generating pathway nodes...")
++        count = 0
++
++        for pathway_id, data in self.pathways.items():
++            props = {
++                'name': data['name'],
++                'url': data['url'],
++                'source': 'Reactome',
++            }
++            yield (pathway_id, "ReactomePathway", props)
++            count += 1
++
++        logger.info(f"Reactome: Generated {count} ReactomePathway nodes")
++
++    def get_edges(self):
++        """
++        Generate GeneParticipatesInPathway edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("Reactome: Generating gene-pathway edges...")
++        count = 0
++        seen = set()
++
++        for link in self.gene_pathway_links:
++            # Deduplicate: same gene-pathway pair may appear with different evidence
++            key = (link['uniprot_id'], link['pathway_id'])
++            if key in seen:
++                continue
++            seen.add(key)
++
++            props = {
++                'evidence': link['evidence'],
++                'source': 'Reactome',
++            }
++
++            yield (
++                None,
++                link['uniprot_id'],
++                link['pathway_id'],
++                "GeneParticipatesInPathway",
++                props
++            )
++            count += 1
++
++        logger.info(f"Reactome: Generated {count} GeneParticipatesInPathway edges")
+diff --git a/template_package/adapters/string_adapter.py b/template_package/adapters/string_adapter.py
+new file mode 100644
+index 0000000..5bdd9e7
+--- /dev/null
++++ b/template_package/adapters/string_adapter.py
+@@ -0,0 +1,166 @@
++"""
++STRING Protein-Protein Interaction Adapter for BioCypher.
++
++Loads STRING interaction data and generates:
++- ProteinInteraction edges (Gene → Gene with confidence scores)
++
++STRING uses Ensembl protein IDs (ENSP) which are mapped to UniProt IDs.
++Only high-confidence interactions (combined_score >= 700) are included.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class STRINGAdapter:
++    def __init__(self, data_dir="template_package/data/string",
++                 min_score=700):
++        self.data_dir = data_dir
++        self.min_score = min_score
++        self.ensp_to_uniprot = {}
++        self.ensp_to_name = {}
++        self.interactions = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load STRING data files."""
++        self._load_aliases()
++        self._load_protein_info()
++        self._load_interactions()
++
++    def _load_aliases(self):
++        """Load ENSP → UniProt ID mappings from aliases file."""
++        filepath = Path(self.data_dir) / '9606.protein.aliases.v12.0.txt.gz'
++        if not filepath.exists():
++            logger.warning("STRING: aliases file not found")
++            return
++
++        logger.info("STRING: Loading UniProt ID mappings from aliases...")
++        with gzip.open(filepath, 'rt') as f:
++            for line in f:
++                if line.startswith('#'):
++                    continue
++                parts = line.strip().split('\t')
++                if len(parts) >= 3:
++                    ensp_id = parts[0]
++                    alias = parts[1]
++                    source = parts[2]
++
++                    # Prefer UniProt_AC mappings (reviewed/canonical)
++                    if source == 'UniProt_AC':
++                        # Take the first UniProt AC as the primary one
++                        # UniProt reviewed IDs are typically 6 chars
++                        if ensp_id not in self.ensp_to_uniprot:
++                            self.ensp_to_uniprot[ensp_id] = alias
++                        elif len(alias) == 6 and len(self.ensp_to_uniprot[ensp_id]) != 6:
++                            # Prefer canonical 6-char UniProt IDs
++                            self.ensp_to_uniprot[ensp_id] = alias
++
++        logger.info(f"STRING: Mapped {len(self.ensp_to_uniprot)} ENSP IDs to UniProt")
++
++    def _load_protein_info(self):
++        """Load protein names from info file."""
++        filepath = Path(self.data_dir) / '9606.protein.info.v12.0.txt.gz'
++        if not filepath.exists():
++            return
++
++        logger.info("STRING: Loading protein info...")
++        with gzip.open(filepath, 'rt') as f:
++            for line in f:
++                if line.startswith('#'):
++                    continue
++                parts = line.strip().split('\t')
++                if len(parts) >= 2:
++                    self.ensp_to_name[parts[0]] = parts[1]
++
++    def _load_interactions(self):
++        """Load protein-protein interactions above the score threshold."""
++        filepath = Path(self.data_dir) / '9606.protein.links.v12.0.txt.gz'
++        if not filepath.exists():
++            logger.warning("STRING: links file not found")
++            return
++
++        logger.info(f"STRING: Loading interactions (min_score={self.min_score})...")
++        total = 0
++        kept = 0
++
++        with gzip.open(filepath, 'rt') as f:
++            header = f.readline()  # Skip header
++            for line in f:
++                parts = line.strip().split()
++                if len(parts) < 3:
++                    continue
++
++                total += 1
++                protein1 = parts[0]
++                protein2 = parts[1]
++                score = int(parts[2])
++
++                if score >= self.min_score:
++                    # Map ENSP to UniProt
++                    up1 = self.ensp_to_uniprot.get(protein1)
++                    up2 = self.ensp_to_uniprot.get(protein2)
++
++                    if up1 and up2 and up1 != up2:
++                        # Normalize edge direction (alphabetical) for deduplication
++                        if up1 > up2:
++                            up1, up2 = up2, up1
++
++                        self.interactions.append({
++                            'source': up1,
++                            'target': up2,
++                            'score': score,
++                            'ensp1': protein1,
++                            'ensp2': protein2,
++                        })
++                        kept += 1
++
++                if total % 2000000 == 0:
++                    logger.info(f"STRING: Processed {total} links, kept {kept}...")
++
++        logger.info(f"STRING: Loaded {kept}/{total} interactions "
++                     f"(score >= {self.min_score})")
++
++    def get_nodes(self):
++        """
++        STRING adapter produces no nodes directly.
++        Interactions reference Gene nodes created by other adapters.
++        Yields nothing.
++        """
++        logger.info("STRING: No dedicated nodes (references existing Gene nodes)")
++        return
++        yield  # Make it a generator
++
++    def get_edges(self):
++        """
++        Generate ProteinInteraction edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("STRING: Generating ProteinInteraction edges...")
++        count = 0
++
++        for interaction in self.interactions:
++            props = {
++                'combined_score': interaction['score'],
++                'source_db': 'STRING',
++            }
++
++            yield (
++                None,
++                interaction['source'],
++                interaction['target'],
++                "ProteinInteraction",
++                props
++            )
++            count += 1
++
++        logger.info(f"STRING: Generated {count} ProteinInteraction edges")

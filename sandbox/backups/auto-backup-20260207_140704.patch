@@ -1,0 +1,639 @@
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index 86916a7..4f34c17 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -1542,3 +1542,71 @@ brain grn:
+     enhancer_region: str
+     edge_weight: float
+     source: str
++
++# ============================================================
++# MitoCarta (Mitochondrial Proteome)
++# ============================================================
++
++mitochondrial protein:
++  is_a: related to
++  represented_as: edge
++  input_label: MitochondrialProtein
++  properties:
++    gene_symbol: str
++    description: str
++    maestro_score: int
++    evidence: str
++    source: str
++
++# ============================================================
++# UniProt Swiss-Prot (Human Proteome)
++# ============================================================
++
++uniprot protein:
++  is_a: protein
++  represented_as: node
++  preferred_id: uniprot
++  input_label: UniProtProtein
++  properties:
++    gene_name: str
++    protein_name: str
++    length: int
++    subcellular_location: str
++    function: str
++    tissue_specificity: str
++    source: str
++
++# ============================================================
++# GOA (Gene Ontology Annotations)
++# ============================================================
++
++go annotation:
++  is_a: related to
++  represented_as: edge
++  input_label: GOAnnotation
++  properties:
++    gene_symbol: str
++    qualifier: str
++    evidence_code: str
++    aspect: str
++    source: str
++
++# ============================================================
++# ClinVar (Clinical Variants)
++# ============================================================
++
++clinvar variant:
++  is_a: sequence variant
++  represented_as: node
++  preferred_id: clinvar
++  input_label: ClinVarVariant
++  properties:
++    type: str
++    name: str
++    gene_symbol: str
++    clinical_significance: str
++    chromosome: str
++    start: int
++    phenotype: str
++    review_status: str
++    source: str
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index 07d84cf..be9efab 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -669,6 +669,38 @@ try:
+ except Exception as e:
+     logger.warning(f"Could not load PsychENCODE GRN adapter: {e}")
+ 
++# --- MitoCarta (Mitochondrial Proteome) ---
++try:
++    from template_package.adapters.mitocarta_adapter import MitoCartaAdapter
++    adapters.append(("MitoCarta", MitoCartaAdapter()))
++    logger.info("Loaded MitoCarta adapter")
++except Exception as e:
++    logger.warning(f"Could not load MitoCarta adapter: {e}")
++
++# --- UniProt Swiss-Prot (Human Proteome) ---
++try:
++    from template_package.adapters.uniprot_adapter import UniProtAdapter
++    adapters.append(("UniProt", UniProtAdapter()))
++    logger.info("Loaded UniProt adapter")
++except Exception as e:
++    logger.warning(f"Could not load UniProt adapter: {e}")
++
++# --- GOA (Gene Ontology Annotations) ---
++try:
++    from template_package.adapters.goa_adapter import GOAAdapter
++    adapters.append(("GOA", GOAAdapter()))
++    logger.info("Loaded GOA adapter")
++except Exception as e:
++    logger.warning(f"Could not load GOA adapter: {e}")
++
++# --- ClinVar (Clinical Variants) ---
++try:
++    from template_package.adapters.clinvar_adapter import ClinVarAdapter
++    adapters.append(("ClinVar", ClinVarAdapter()))
++    logger.info("Loaded ClinVar adapter")
++except Exception as e:
++    logger.warning(f"Could not load ClinVar adapter: {e}")
++
+ # ============================================================
+ # 3. Write nodes and edges from all adapters
+ # ============================================================
+diff --git a/template_package/adapters/clinvar_adapter.py b/template_package/adapters/clinvar_adapter.py
+new file mode 100644
+index 0000000..36e52a5
+--- /dev/null
++++ b/template_package/adapters/clinvar_adapter.py
+@@ -0,0 +1,127 @@
++"""
++ClinVar Adapter for BioCypher.
++
++Loads ClinVar variant-disease associations and generates:
++- ClinVarVariant nodes (clinically significant genetic variants)
++
++ClinVar is a public archive of reports of the relationships
++among human variations and phenotypes, with supporting evidence.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class ClinVarAdapter:
++    def __init__(self, data_dir="template_package/data/clinvar"):
++        self.data_dir = Path(data_dir)
++        self.variants = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load ClinVar variant summary data."""
++        path = self.data_dir / 'variant_summary.txt.gz'
++        if not path.exists():
++            logger.warning("ClinVar: variant summary not found")
++            return
++
++        logger.info("ClinVar: Loading variant summary (GRCh38 pathogenic/likely pathogenic)...")
++        count = 0
++        seen = set()
++
++        with gzip.open(path, 'rt', encoding='utf-8') as f:
++            header = None
++            for line in f:
++                parts = line.strip().split('\t')
++                if header is None:
++                    header = parts
++                    continue
++
++                if len(parts) < 20:
++                    continue
++
++                allele_id = parts[0]
++                var_type = parts[1]
++                name = parts[2]
++                gene_id = parts[3]
++                gene_symbol = parts[4]
++                clin_sig = parts[6]
++                assembly = parts[16] if len(parts) > 16 else ''
++                chromosome = parts[18] if len(parts) > 18 else ''
++                start = parts[19] if len(parts) > 19 else ''
++                phenotype_list = parts[13] if len(parts) > 13 else ''
++                review_status = parts[24] if len(parts) > 24 else ''
++
++                # Only GRCh38 and pathogenic/likely pathogenic
++                if assembly != 'GRCh38':
++                    continue
++                if 'athogenic' not in clin_sig:
++                    continue
++
++                # Deduplicate
++                if allele_id in seen:
++                    continue
++                seen.add(allele_id)
++
++                try:
++                    start_int = int(start)
++                except ValueError:
++                    start_int = 0
++
++                self.variants.append({
++                    'allele_id': allele_id,
++                    'type': var_type,
++                    'name': name[:200],
++                    'gene_symbol': gene_symbol,
++                    'clinical_significance': clin_sig,
++                    'chromosome': chromosome,
++                    'start': start_int,
++                    'phenotype': phenotype_list[:200],
++                    'review_status': review_status,
++                })
++                count += 1
++
++                if count >= 500000:
++                    break
++
++        logger.info(f"ClinVar: Loaded {count} pathogenic/likely pathogenic variants")
++
++    def get_nodes(self):
++        """
++        Generate ClinVarVariant nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("ClinVar: Generating nodes...")
++        count = 0
++
++        for var in self.variants:
++            props = {
++                'type': var['type'],
++                'name': self._sanitize(var['name']),
++                'gene_symbol': self._sanitize(var['gene_symbol']),
++                'clinical_significance': self._sanitize(var['clinical_significance']),
++                'chromosome': var['chromosome'],
++                'start': var['start'],
++                'phenotype': self._sanitize(var['phenotype']),
++                'review_status': self._sanitize(var['review_status']),
++                'source': 'ClinVar',
++            }
++
++            yield (f"ClinVar:{var['allele_id']}", "ClinVarVariant", props)
++            count += 1
++
++        logger.info(f"ClinVar: Generated {count} ClinVarVariant nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("ClinVar: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/goa_adapter.py b/template_package/adapters/goa_adapter.py
+new file mode 100644
+index 0000000..1b546d7
+--- /dev/null
++++ b/template_package/adapters/goa_adapter.py
+@@ -0,0 +1,109 @@
++"""
++GOA Adapter for BioCypher.
++
++Loads Gene Ontology Annotations (GOA) for human and generates:
++- GOAnnotation edges (protein → GO term annotations)
++
++GOA provides Gene Ontology annotations for UniProt proteins,
++covering molecular function, biological process, and cellular component.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class GOAAdapter:
++    def __init__(self, data_dir="template_package/data/goa"):
++        self.data_dir = Path(data_dir)
++        self.annotations = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load GOA human annotations."""
++        path = self.data_dir / 'goa_human.gaf.gz'
++        if not path.exists():
++            logger.warning("GOA: annotation file not found")
++            return
++
++        logger.info("GOA: Loading human GO annotations...")
++        count = 0
++        seen = set()
++
++        with gzip.open(path, 'rt', encoding='utf-8') as f:
++            for line in f:
++                if line.startswith('!'):
++                    continue
++                parts = line.strip().split('\t')
++                if len(parts) < 15:
++                    continue
++
++                db = parts[0]
++                uniprot_id = parts[1]
++                symbol = parts[2]
++                qualifier = parts[3]
++                go_id = parts[4]
++                evidence_code = parts[6]
++                aspect = parts[8]  # F=function, P=process, C=component
++
++                if db != 'UniProtKB':
++                    continue
++
++                # Deduplicate by protein-GO pair
++                key = (uniprot_id, go_id)
++                if key in seen:
++                    continue
++                seen.add(key)
++
++                self.annotations.append({
++                    'uniprot_id': uniprot_id,
++                    'symbol': symbol,
++                    'qualifier': qualifier,
++                    'go_id': go_id,
++                    'evidence_code': evidence_code,
++                    'aspect': aspect,
++                })
++                count += 1
++
++        logger.info(f"GOA: Loaded {count} unique protein-GO annotations")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("GOA: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate GOAnnotation edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("GOA: Generating edges...")
++        count = 0
++
++        for ann in self.annotations:
++            props = {
++                'gene_symbol': self._sanitize(ann['symbol']),
++                'qualifier': self._sanitize(ann['qualifier']),
++                'evidence_code': ann['evidence_code'],
++                'aspect': ann['aspect'],
++                'source': 'GOA',
++            }
++
++            yield (
++                None,
++                ann['uniprot_id'],
++                ann['go_id'],
++                "GOAnnotation",
++                props
++            )
++            count += 1
++
++        logger.info(f"GOA: Generated {count} GOAnnotation edges")
+diff --git a/template_package/adapters/mitocarta_adapter.py b/template_package/adapters/mitocarta_adapter.py
+new file mode 100644
+index 0000000..5da8621
+--- /dev/null
++++ b/template_package/adapters/mitocarta_adapter.py
+@@ -0,0 +1,150 @@
++"""
++MitoCarta Adapter for BioCypher.
++
++Loads MitoCarta 3.0 mitochondrial proteome data and generates:
++- MitochondrialProtein edges (proteins localized to mitochondria)
++
++MitoCarta is a comprehensive inventory of mitochondrial proteins,
++scored by evidence from proteomics, literature, and homology.
++"""
++
++from html.parser import HTMLParser
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class _TableParser(HTMLParser):
++    def __init__(self):
++        super().__init__()
++        self.in_table = False
++        self.in_row = False
++        self.in_cell = False
++        self.current_row = []
++        self.rows = []
++
++    def handle_starttag(self, tag, attrs):
++        if tag == 'table':
++            self.in_table = True
++        elif tag == 'tr':
++            self.in_row = True
++            self.current_row = []
++        elif tag in ('td', 'th'):
++            self.in_cell = True
++
++    def handle_endtag(self, tag):
++        if tag == 'table':
++            self.in_table = False
++        elif tag == 'tr':
++            self.in_row = False
++            if self.current_row:
++                self.rows.append(self.current_row)
++        elif tag in ('td', 'th'):
++            self.in_cell = False
++
++    def handle_data(self, data):
++        if self.in_cell:
++            self.current_row.append(data.strip())
++
++
++class MitoCartaAdapter:
++    def __init__(self, data_dir="template_package/data/mitocarta"):
++        self.data_dir = Path(data_dir)
++        self.proteins = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load MitoCarta protein data from HTML."""
++        path = self.data_dir / 'mitocarta_html.html'
++        if not path.exists():
++            logger.warning("MitoCarta: HTML data not found")
++            return
++
++        logger.info("MitoCarta: Loading mitochondrial proteome...")
++
++        with open(path, 'r', encoding='utf-8') as f:
++            content = f.read()
++
++        parser = _TableParser()
++        parser.feed(content)
++
++        if len(parser.rows) < 2:
++            logger.warning("MitoCarta: No data rows found in HTML")
++            return
++
++        header = parser.rows[0]
++        for row in parser.rows[1:]:
++            if len(row) < 3:
++                continue
++
++            symbol = row[0].strip() if len(row) > 0 else ''
++            description = row[1].strip() if len(row) > 1 else ''
++            synonyms = row[2].strip() if len(row) > 2 else ''
++            score = row[3].strip() if len(row) > 3 else '0'
++            evidence = row[4].strip() if len(row) > 4 else ''
++
++            if not symbol:
++                continue
++
++            # Extract UniProt ID from synonyms if present
++            uniprot = ''
++            for syn in synonyms.split(','):
++                syn = syn.strip()
++                if len(syn) == 6 and syn[0].isalpha() and syn[1:].replace('_', '').isalnum():
++                    uniprot = syn
++                    break
++
++            try:
++                score_int = int(score)
++            except ValueError:
++                score_int = 0
++
++            self.proteins.append({
++                'symbol': symbol,
++                'description': description,
++                'score': score_int,
++                'evidence': evidence,
++                'uniprot': uniprot,
++            })
++
++        logger.info(f"MitoCarta: Loaded {len(self.proteins)} mitochondrial proteins")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("MitoCarta: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate MitochondrialProtein edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("MitoCarta: Generating edges...")
++        count = 0
++
++        for prot in self.proteins:
++            props = {
++                'gene_symbol': self._sanitize(prot['symbol']),
++                'description': self._sanitize(prot['description'][:200]),
++                'maestro_score': prot['score'],
++                'evidence': self._sanitize(prot['evidence'][:200]),
++                'source': 'MitoCarta3',
++            }
++
++            yield (
++                None,
++                prot['symbol'],
++                "MITOCHONDRIA",
++                "MitochondrialProtein",
++                props
++            )
++            count += 1
++
++        logger.info(f"MitoCarta: Generated {count} MitochondrialProtein edges")
+diff --git a/template_package/adapters/uniprot_adapter.py b/template_package/adapters/uniprot_adapter.py
+new file mode 100644
+index 0000000..4f741ee
+--- /dev/null
++++ b/template_package/adapters/uniprot_adapter.py
+@@ -0,0 +1,110 @@
++"""
++UniProt Adapter for BioCypher.
++
++Loads UniProt Swiss-Prot reviewed human proteome and generates:
++- UniProtProtein nodes (curated human protein annotations)
++
++UniProt provides comprehensive, high-quality protein sequence and
++functional information for all known human proteins.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class UniProtAdapter:
++    def __init__(self, data_dir="template_package/data/uniprot"):
++        self.data_dir = Path(data_dir)
++        self.proteins = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load UniProt Swiss-Prot human proteome."""
++        path = self.data_dir / 'human_swissprot.tsv'
++        if not path.exists():
++            logger.warning("UniProt: human proteome data not found")
++            return
++
++        logger.info("UniProt: Loading Swiss-Prot human proteome...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            header = None
++            for line in f:
++                parts = line.strip().split('\t')
++                if header is None:
++                    header = parts
++                    continue
++
++                if len(parts) < 4:
++                    continue
++
++                entry = parts[0].strip()
++                gene_names = parts[1].strip() if len(parts) > 1 else ''
++                protein_name = parts[2].strip() if len(parts) > 2 else ''
++                length = parts[3].strip() if len(parts) > 3 else '0'
++                subcellular = parts[4].strip() if len(parts) > 4 else ''
++                function = parts[5].strip() if len(parts) > 5 else ''
++                go_ids = parts[6].strip() if len(parts) > 6 else ''
++                tissue = parts[8].strip() if len(parts) > 8 else ''
++
++                if not entry:
++                    continue
++
++                try:
++                    length_int = int(length)
++                except ValueError:
++                    length_int = 0
++
++                primary_gene = gene_names.split()[0] if gene_names else ''
++
++                self.proteins.append({
++                    'entry': entry,
++                    'gene_name': primary_gene,
++                    'protein_name': protein_name[:200],
++                    'length': length_int,
++                    'subcellular': subcellular[:300],
++                    'function': function[:300],
++                    'go_ids': go_ids,
++                    'tissue': tissue[:200],
++                })
++                count += 1
++
++        logger.info(f"UniProt: Loaded {count} Swiss-Prot human proteins")
++
++    def get_nodes(self):
++        """
++        Generate UniProtProtein nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("UniProt: Generating nodes...")
++        count = 0
++
++        for prot in self.proteins:
++            props = {
++                'gene_name': self._sanitize(prot['gene_name']),
++                'protein_name': self._sanitize(prot['protein_name']),
++                'length': prot['length'],
++                'subcellular_location': self._sanitize(prot['subcellular']),
++                'function': self._sanitize(prot['function']),
++                'tissue_specificity': self._sanitize(prot['tissue']),
++                'source': 'UniProt_SwissProt',
++            }
++
++            yield (prot['entry'], "UniProtProtein", props)
++            count += 1
++
++        logger.info(f"UniProt: Generated {count} UniProtProtein nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("UniProt: No edges to generate")
++        return iter([])

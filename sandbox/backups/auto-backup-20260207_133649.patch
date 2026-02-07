@@ -1,0 +1,1526 @@
+diff --git a/config/schema_config.yaml b/config/schema_config.yaml
+index eac36b2..bd5989b 100644
+--- a/config/schema_config.yaml
++++ b/config/schema_config.yaml
+@@ -1290,3 +1290,187 @@ mirna target prediction:
+   properties:
+     prediction_score: float
+     source: str
++
++# ============================================================
++# GENCODE (Gene Annotations)
++# ============================================================
++
++gencode gene:
++  is_a: gene
++  represented_as: node
++  preferred_id: ensembl
++  input_label: GencodeGene
++  properties:
++    gene_name: str
++    gene_type: str
++    chromosome: str
++    start: int
++    end: int
++    strand: str
++    annotation_level: str
++    hgnc_id: str
++    source: str
++
++# ============================================================
++# JASPAR (TF Binding Profiles)
++# ============================================================
++
++tf binding profile:
++  is_a: information content entity
++  represented_as: node
++  preferred_id: jaspar
++  input_label: TFBindingProfile
++  properties:
++    name: str
++    base_id: str
++    version: str
++    collection: str
++    source: str
++
++# ============================================================
++# HuRI (Human Reference Interactome)
++# ============================================================
++
++reference interaction:
++  is_a: pairwise molecular interaction
++  represented_as: edge
++  input_label: ReferenceInteraction
++  properties:
++    detection_method: str
++    source: str
++
++# ============================================================
++# APPRIS (Principal Isoforms)
++# ============================================================
++
++principal isoform:
++  is_a: related to
++  represented_as: edge
++  input_label: PrincipalIsoform
++  properties:
++    gene_name: str
++    ccds_id: str
++    appris_annotation: str
++    mane_status: str
++    source: str
++
++# ============================================================
++# RNAcentral (Non-coding RNAs)
++# ============================================================
++
++ncrna:
++  is_a: nucleic acid entity
++  represented_as: node
++  preferred_id: rnacentral
++  input_label: NcRNA
++  properties:
++    gene_name: str
++    rna_type: str
++    hgnc_id: str
++    databases: str
++    source: str
++
++# ============================================================
++# MODOMICS (RNA Modifications)
++# ============================================================
++
++rna modification:
++  is_a: chemical entity
++  represented_as: node
++  preferred_id: modomics
++  input_label: RNAModification
++  properties:
++    name: str
++    short_name: str
++    formula: str
++    mass_avg: float
++    reference_moiety: str
++    source: str
++
++# ============================================================
++# OPM (Membrane Protein Orientations)
++# ============================================================
++
++membrane orientation:
++  is_a: related to
++  represented_as: edge
++  input_label: MembraneOrientation
++  properties:
++    name: str
++    thickness: float
++    tilt: int
++    gibbs_energy: float
++    resolution: str
++    subunit_segments: int
++    family_name: str
++    species: str
++    membrane_type: str
++    source: str
++
++# ============================================================
++# PolyASite (Polyadenylation Sites)
++# ============================================================
++
++polya cluster:
++  is_a: genomic entity
++  represented_as: node
++  preferred_id: polyasite
++  input_label: PolyACluster
++  properties:
++    chromosome: str
++    start: int
++    end: int
++    strand: str
++    score: float
++    annotation: str
++    gene_name: str
++    num_protocols: str
++    source: str
++
++# ============================================================
++# DrLLPS (Liquid-Liquid Phase Separation)
++# ============================================================
++
++llps protein:
++  is_a: related to
++  represented_as: edge
++  input_label: LLPSProtein
++  properties:
++    gene_name: str
++    condensate: str
++    llps_type: str
++    ensembl_id: str
++    source: str
++
++# ============================================================
++# ATtRACT (RNA-Binding Protein Motifs)
++# ============================================================
++
++rbp motif:
++  is_a: sequence feature
++  represented_as: node
++  preferred_id: attract
++  input_label: RBPMotif
++  properties:
++    gene_name: str
++    motif_sequence: str
++    motif_length: str
++    experiment: str
++    database: str
++    source: str
++
++# ============================================================
++# circAtlas (Circular RNAs)
++# ============================================================
++
++circrna atlas:
++  is_a: nucleic acid entity
++  represented_as: node
++  preferred_id: circatlas
++  input_label: CircRNAAtlas
++  properties:
++    chromosome: str
++    start: int
++    end: int
++    strand: str
++    source: str
+diff --git a/create_knowledge_graph.py b/create_knowledge_graph.py
+index 1ac1384..fc4a340 100644
+--- a/create_knowledge_graph.py
++++ b/create_knowledge_graph.py
+@@ -541,6 +541,94 @@ try:
+ except Exception as e:
+     logger.warning(f"Could not load UniCarbKB/GlyGen adapter: {e}")
+ 
++# --- GENCODE (Gene Annotations) ---
++try:
++    from template_package.adapters.gencode_adapter import GENCODEAdapter
++    adapters.append(("GENCODE", GENCODEAdapter()))
++    logger.info("Loaded GENCODE adapter")
++except Exception as e:
++    logger.warning(f"Could not load GENCODE adapter: {e}")
++
++# --- JASPAR (TF Binding Profiles) ---
++try:
++    from template_package.adapters.jaspar_adapter import JASPARAdapter
++    adapters.append(("JASPAR", JASPARAdapter()))
++    logger.info("Loaded JASPAR adapter")
++except Exception as e:
++    logger.warning(f"Could not load JASPAR adapter: {e}")
++
++# --- HuRI (Human Reference Interactome) ---
++try:
++    from template_package.adapters.huri_adapter import HuRIAdapter
++    adapters.append(("HuRI", HuRIAdapter()))
++    logger.info("Loaded HuRI adapter")
++except Exception as e:
++    logger.warning(f"Could not load HuRI adapter: {e}")
++
++# --- APPRIS (Principal Isoforms) ---
++try:
++    from template_package.adapters.appris_adapter import APPRISAdapter
++    adapters.append(("APPRIS", APPRISAdapter()))
++    logger.info("Loaded APPRIS adapter")
++except Exception as e:
++    logger.warning(f"Could not load APPRIS adapter: {e}")
++
++# --- RNAcentral (Non-coding RNAs) ---
++try:
++    from template_package.adapters.rnacentral_adapter import RNAcentralAdapter
++    adapters.append(("RNAcentral", RNAcentralAdapter()))
++    logger.info("Loaded RNAcentral adapter")
++except Exception as e:
++    logger.warning(f"Could not load RNAcentral adapter: {e}")
++
++# --- MODOMICS (RNA Modifications) ---
++try:
++    from template_package.adapters.modomics_adapter import MODOMICSAdapter
++    adapters.append(("MODOMICS", MODOMICSAdapter()))
++    logger.info("Loaded MODOMICS adapter")
++except Exception as e:
++    logger.warning(f"Could not load MODOMICS adapter: {e}")
++
++# --- OPM (Membrane Protein Orientations) ---
++try:
++    from template_package.adapters.opm_adapter import OPMAdapter
++    adapters.append(("OPM", OPMAdapter()))
++    logger.info("Loaded OPM adapter")
++except Exception as e:
++    logger.warning(f"Could not load OPM adapter: {e}")
++
++# --- PolyASite (Polyadenylation Sites) ---
++try:
++    from template_package.adapters.polyasite_adapter import PolyASiteAdapter
++    adapters.append(("PolyASite", PolyASiteAdapter()))
++    logger.info("Loaded PolyASite adapter")
++except Exception as e:
++    logger.warning(f"Could not load PolyASite adapter: {e}")
++
++# --- DrLLPS (Liquid-Liquid Phase Separation) ---
++try:
++    from template_package.adapters.drllps_adapter import DrLLPSAdapter
++    adapters.append(("DrLLPS", DrLLPSAdapter()))
++    logger.info("Loaded DrLLPS adapter")
++except Exception as e:
++    logger.warning(f"Could not load DrLLPS adapter: {e}")
++
++# --- ATtRACT (RNA-Binding Protein Motifs) ---
++try:
++    from template_package.adapters.attract_adapter import ATtRACTAdapter
++    adapters.append(("ATtRACT", ATtRACTAdapter()))
++    logger.info("Loaded ATtRACT adapter")
++except Exception as e:
++    logger.warning(f"Could not load ATtRACT adapter: {e}")
++
++# --- circAtlas (Circular RNAs) ---
++try:
++    from template_package.adapters.circatlas_adapter import CircAtlasAdapter
++    adapters.append(("circAtlas", CircAtlasAdapter()))
++    logger.info("Loaded circAtlas adapter")
++except Exception as e:
++    logger.warning(f"Could not load circAtlas adapter: {e}")
++
+ # ============================================================
+ # 3. Write nodes and edges from all adapters
+ # ============================================================
+diff --git a/template_package/adapters/appris_adapter.py b/template_package/adapters/appris_adapter.py
+new file mode 100644
+index 0000000..5d6f222
+--- /dev/null
++++ b/template_package/adapters/appris_adapter.py
+@@ -0,0 +1,98 @@
++"""
++APPRIS Adapter for BioCypher.
++
++Loads APPRIS principal isoform annotations and generates:
++- PrincipalIsoform edges (gene → transcript principal isoform annotation)
++
++APPRIS annotates splice isoforms for protein-coding genes, identifying
++principal functional isoforms based on structure, function, and conservation.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class APPRISAdapter:
++    def __init__(self, data_dir="template_package/data/appris"):
++        self.data_dir = Path(data_dir)
++        self.isoforms = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load APPRIS principal isoform data."""
++        path = self.data_dir / 'appris_principal.txt'
++        if not path.exists():
++            logger.warning("APPRIS: principal isoform data not found")
++            return
++
++        logger.info("APPRIS: Loading principal isoform annotations...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            for line in f:
++                parts = line.strip().split('\t')
++                if len(parts) < 5:
++                    continue
++
++                gene_name = parts[0].strip()
++                gene_id = parts[1].strip()
++                transcript_id = parts[2].strip()
++                ccds_id = parts[3].strip()
++                appris_annotation = parts[4].strip()
++                mane = parts[5].strip() if len(parts) > 5 else ''
++
++                if not gene_id or not transcript_id:
++                    continue
++
++                self.isoforms.append({
++                    'gene_name': gene_name,
++                    'gene_id': gene_id,
++                    'transcript_id': transcript_id,
++                    'ccds_id': ccds_id,
++                    'annotation': appris_annotation,
++                    'mane': mane,
++                })
++                count += 1
++
++        logger.info(f"APPRIS: Loaded {count} isoform annotations")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("APPRIS: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate PrincipalIsoform edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("APPRIS: Generating edges...")
++        count = 0
++
++        for iso in self.isoforms:
++            props = {
++                'gene_name': self._sanitize(iso['gene_name']),
++                'ccds_id': iso['ccds_id'],
++                'appris_annotation': iso['annotation'],
++                'mane_status': iso['mane'],
++                'source': 'APPRIS',
++            }
++
++            yield (
++                None,
++                iso['gene_id'],
++                iso['transcript_id'],
++                "PrincipalIsoform",
++                props
++            )
++            count += 1
++
++        logger.info(f"APPRIS: Generated {count} PrincipalIsoform edges")
+diff --git a/template_package/adapters/attract_adapter.py b/template_package/adapters/attract_adapter.py
+new file mode 100644
+index 0000000..69c9f80
+--- /dev/null
++++ b/template_package/adapters/attract_adapter.py
+@@ -0,0 +1,112 @@
++"""
++ATtRACT Adapter for BioCypher.
++
++Loads ATtRACT RNA-binding protein motif data and generates:
++- RBPMotif nodes (RNA-binding protein sequence motifs)
++
++ATtRACT is a database of RNA-binding protein (RBP) motifs, providing
++experimentally determined binding preferences.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class ATtRACTAdapter:
++    def __init__(self, data_dir="template_package/data/attract"):
++        self.data_dir = Path(data_dir)
++        self.motifs = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load ATtRACT motif data."""
++        path = self.data_dir / 'ATtRACT_db.txt'
++        if not path.exists():
++            logger.warning("ATtRACT: motif data not found")
++            return
++
++        logger.info("ATtRACT: Loading RBP motif data...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            header = None
++            for line in f:
++                parts = line.strip().split('\t')
++                if header is None:
++                    header = parts
++                    continue
++
++                if len(parts) < 8:
++                    continue
++
++                gene_name = parts[0].strip()
++                gene_id = parts[1].strip()
++                organism = parts[3].strip()
++                motif = parts[4].strip()
++                motif_len = parts[5].strip()
++                experiment = parts[6].strip()
++                database = parts[7].strip()
++
++                if 'Homo_sapiens' not in organism:
++                    continue
++
++                if not gene_name or not motif:
++                    continue
++
++                self.motifs.append({
++                    'gene_name': gene_name,
++                    'gene_id': gene_id,
++                    'motif': motif,
++                    'motif_length': motif_len,
++                    'experiment': experiment,
++                    'database': database,
++                })
++                count += 1
++
++        logger.info(f"ATtRACT: Loaded {count} human RBP motifs")
++
++    def get_nodes(self):
++        """
++        Generate RBPMotif nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("ATtRACT: Generating nodes...")
++        seen = set()
++        count = 0
++
++        for motif in self.motifs:
++            key = (motif['gene_name'], motif['motif'])
++            if key in seen:
++                continue
++            seen.add(key)
++
++            props = {
++                'gene_name': self._sanitize(motif['gene_name']),
++                'motif_sequence': motif['motif'],
++                'motif_length': motif['motif_length'],
++                'experiment': self._sanitize(motif['experiment']),
++                'database': motif['database'],
++                'source': 'ATtRACT',
++            }
++
++            yield (
++                f"ATtRACT:{motif['gene_name']}:{motif['motif']}",
++                "RBPMotif",
++                props
++            )
++            count += 1
++
++        logger.info(f"ATtRACT: Generated {count} RBPMotif nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("ATtRACT: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/circatlas_adapter.py b/template_package/adapters/circatlas_adapter.py
+new file mode 100644
+index 0000000..0e15c0f
+--- /dev/null
++++ b/template_package/adapters/circatlas_adapter.py
+@@ -0,0 +1,104 @@
++"""
++circAtlas Adapter for BioCypher.
++
++Loads circAtlas v3.0 human circular RNA data and generates:
++- CircRNAAtlas nodes (circular RNA annotations with genomic coordinates)
++
++circAtlas is a comprehensive database of circular RNAs across
++vertebrate species with tissue expression profiles.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class CircAtlasAdapter:
++    def __init__(self, data_dir="template_package/data/circatlas"):
++        self.data_dir = Path(data_dir)
++        self.circrnas = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load circAtlas human circRNA data."""
++        path = self.data_dir / 'human_bed_v3.0.txt'
++        if not path.exists():
++            logger.warning("circAtlas: BED data not found")
++            return
++
++        logger.info("circAtlas: Loading human circRNA data...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            header = None
++            for line in f:
++                parts = line.strip().split('\t')
++                if header is None:
++                    header = parts
++                    continue
++
++                if len(parts) < 5:
++                    continue
++
++                chrom = parts[0].strip()
++                start = parts[1].strip()
++                end = parts[2].strip()
++                strand = parts[3].strip()
++                circ_id = parts[4].strip()
++
++                if not chrom.startswith('chr'):
++                    continue
++
++                try:
++                    start_int = int(start)
++                    end_int = int(end)
++                except ValueError:
++                    continue
++
++                self.circrnas.append({
++                    'circ_id': circ_id,
++                    'chromosome': chrom,
++                    'start': start_int,
++                    'end': end_int,
++                    'strand': strand,
++                })
++                count += 1
++
++                if count >= 500000:
++                    break
++
++        logger.info(f"circAtlas: Loaded {count} human circRNAs")
++
++    def get_nodes(self):
++        """
++        Generate CircRNAAtlas nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("circAtlas: Generating nodes...")
++        count = 0
++
++        for circ in self.circrnas:
++            props = {
++                'chromosome': circ['chromosome'],
++                'start': circ['start'],
++                'end': circ['end'],
++                'strand': circ['strand'],
++                'source': 'circAtlas_v3',
++            }
++
++            yield (f"circAtlas:{circ['circ_id']}", "CircRNAAtlas", props)
++            count += 1
++
++        logger.info(f"circAtlas: Generated {count} CircRNAAtlas nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("circAtlas: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/drllps_adapter.py b/template_package/adapters/drllps_adapter.py
+new file mode 100644
+index 0000000..25e1256
+--- /dev/null
++++ b/template_package/adapters/drllps_adapter.py
+@@ -0,0 +1,112 @@
++"""
++DrLLPS Adapter for BioCypher.
++
++Loads DrLLPS liquid-liquid phase separation data and generates:
++- LLPSProtein edges (proteins involved in LLPS with condensate info)
++
++DrLLPS is a database of proteins driving liquid-liquid phase separation,
++providing information on scaffolds, clients, and regulators of condensates.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class DrLLPSAdapter:
++    def __init__(self, data_dir="template_package/data/drllps"):
++        self.data_dir = Path(data_dir)
++        self.proteins = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load DrLLPS LLPS protein data."""
++        path = self.data_dir / 'drllps_all.txt'
++        if not path.exists():
++            logger.warning("DrLLPS: data file not found")
++            return
++
++        logger.info("DrLLPS: Loading LLPS protein data...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            header = None
++            for line in f:
++                parts = line.strip().split('\t')
++                if header is None:
++                    header = parts
++                    continue
++
++                if len(parts) < 7:
++                    continue
++
++                drllps_id = parts[0].strip()
++                uniprot = parts[1].strip()
++                gene_name = parts[2].strip()
++                ensembl = parts[3].strip()
++                species = parts[4].strip()
++                condensate = parts[5].strip()
++                llps_type = parts[6].strip()
++
++                if species != 'Homo sapiens':
++                    continue
++
++                if not uniprot:
++                    continue
++
++                self.proteins.append({
++                    'drllps_id': drllps_id,
++                    'uniprot': uniprot,
++                    'gene_name': gene_name,
++                    'ensembl': ensembl,
++                    'condensate': condensate,
++                    'llps_type': llps_type,
++                })
++                count += 1
++
++        logger.info(f"DrLLPS: Loaded {count} human LLPS proteins")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("DrLLPS: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate LLPSProtein edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("DrLLPS: Generating edges...")
++        seen = set()
++        count = 0
++
++        for prot in self.proteins:
++            if prot['uniprot'] in seen:
++                continue
++            seen.add(prot['uniprot'])
++
++            props = {
++                'gene_name': self._sanitize(prot['gene_name']),
++                'condensate': self._sanitize(prot['condensate']),
++                'llps_type': prot['llps_type'],
++                'ensembl_id': prot['ensembl'],
++                'source': 'DrLLPS',
++            }
++
++            yield (
++                None,
++                prot['uniprot'],
++                "LLPS",
++                "LLPSProtein",
++                props
++            )
++            count += 1
++
++        logger.info(f"DrLLPS: Generated {count} LLPSProtein edges")
+diff --git a/template_package/adapters/gencode_adapter.py b/template_package/adapters/gencode_adapter.py
+new file mode 100644
+index 0000000..db6cfb4
+--- /dev/null
++++ b/template_package/adapters/gencode_adapter.py
+@@ -0,0 +1,118 @@
++"""
++GENCODE Adapter for BioCypher.
++
++Loads GENCODE v46 human gene annotations from GTF and generates:
++- GencodeGene nodes (comprehensive gene-level annotations)
++
++GENCODE provides reference gene annotation for the human genome,
++including protein-coding genes, lncRNAs, pseudogenes, and more.
++"""
++
++import gzip
++import re
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class GENCODEAdapter:
++    def __init__(self, data_dir="template_package/data/gencode"):
++        self.data_dir = Path(data_dir)
++        self.genes = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _parse_attributes(self, attr_str):
++        """Parse GTF attribute string into a dict."""
++        attrs = {}
++        for match in re.finditer(r'(\w+)\s+"([^"]*)"', attr_str):
++            key, val = match.group(1), match.group(2)
++            attrs[key] = val
++        return attrs
++
++    def _load_data(self):
++        """Load GENCODE gene annotations from GTF."""
++        path = self.data_dir / 'gencode.v46.annotation.gtf.gz'
++        if not path.exists():
++            logger.warning("GENCODE: GTF file not found")
++            return
++
++        logger.info("GENCODE: Loading gene annotations...")
++        count = 0
++
++        with gzip.open(path, 'rt', encoding='utf-8') as f:
++            for line in f:
++                if line.startswith('#'):
++                    continue
++                parts = line.strip().split('\t')
++                if len(parts) < 9:
++                    continue
++                if parts[2] != 'gene':
++                    continue
++
++                chrom = parts[0]
++                start = int(parts[3])
++                end = int(parts[4])
++                strand = parts[6]
++                attrs = self._parse_attributes(parts[8])
++
++                gene_id = attrs.get('gene_id', '')
++                gene_name = attrs.get('gene_name', '')
++                gene_type = attrs.get('gene_type', '')
++                level = attrs.get('level', '')
++                hgnc_id = attrs.get('hgnc_id', '')
++
++                if not gene_id:
++                    continue
++
++                self.genes.append({
++                    'gene_id': gene_id,
++                    'gene_name': gene_name,
++                    'gene_type': gene_type,
++                    'chromosome': chrom,
++                    'start': start,
++                    'end': end,
++                    'strand': strand,
++                    'level': level,
++                    'hgnc_id': hgnc_id,
++                })
++                count += 1
++
++        logger.info(f"GENCODE: Loaded {count} gene annotations")
++
++    def get_nodes(self):
++        """
++        Generate GencodeGene nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("GENCODE: Generating nodes...")
++        count = 0
++
++        for gene in self.genes:
++            props = {
++                'gene_name': self._sanitize(gene['gene_name']),
++                'gene_type': gene['gene_type'],
++                'chromosome': gene['chromosome'],
++                'start': gene['start'],
++                'end': gene['end'],
++                'strand': gene['strand'],
++                'annotation_level': gene['level'],
++                'hgnc_id': gene['hgnc_id'],
++                'source': 'GENCODE_v46',
++            }
++
++            yield (gene['gene_id'], "GencodeGene", props)
++            count += 1
++
++        logger.info(f"GENCODE: Generated {count} GencodeGene nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("GENCODE: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/huri_adapter.py b/template_package/adapters/huri_adapter.py
+new file mode 100644
+index 0000000..08cfb3e
+--- /dev/null
++++ b/template_package/adapters/huri_adapter.py
+@@ -0,0 +1,98 @@
++"""
++HuRI Adapter for BioCypher.
++
++Loads Human Reference Interactome (HuRI) binary protein-protein interactions
++and generates:
++- ReferenceInteraction edges (experimentally determined binary PPIs)
++
++HuRI is a systematic binary protein-protein interaction map of the human
++proteome generated by yeast two-hybrid screening.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class HuRIAdapter:
++    def __init__(self, data_dir="template_package/data/huri"):
++        self.data_dir = Path(data_dir)
++        self.interactions = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load HuRI interaction data."""
++        # Prefer HuRI.tsv (the main reference interactome)
++        path = self.data_dir / 'HuRI.tsv'
++        if not path.exists():
++            path = self.data_dir / 'HI-union.tsv'
++        if not path.exists():
++            logger.warning("HuRI: interaction data not found")
++            return
++
++        logger.info(f"HuRI: Loading interactions from {path.name}...")
++        seen = set()
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            for line in f:
++                parts = line.strip().split('\t')
++                if len(parts) < 2:
++                    continue
++
++                gene_a = parts[0].strip()
++                gene_b = parts[1].strip()
++
++                if not gene_a or not gene_b:
++                    continue
++
++                # Normalize order for deduplication
++                key = tuple(sorted([gene_a, gene_b]))
++                if key in seen:
++                    continue
++                seen.add(key)
++
++                self.interactions.append({
++                    'gene_a': gene_a,
++                    'gene_b': gene_b,
++                })
++                count += 1
++
++        logger.info(f"HuRI: Loaded {count} binary interactions")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("HuRI: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate ReferenceInteraction edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("HuRI: Generating edges...")
++        count = 0
++
++        for interaction in self.interactions:
++            props = {
++                'detection_method': 'yeast two-hybrid',
++                'source': 'HuRI',
++            }
++
++            yield (
++                None,
++                interaction['gene_a'],
++                interaction['gene_b'],
++                "ReferenceInteraction",
++                props
++            )
++            count += 1
++
++        logger.info(f"HuRI: Generated {count} ReferenceInteraction edges")
+diff --git a/template_package/adapters/jaspar_adapter.py b/template_package/adapters/jaspar_adapter.py
+new file mode 100644
+index 0000000..cdbabe0
+--- /dev/null
++++ b/template_package/adapters/jaspar_adapter.py
+@@ -0,0 +1,91 @@
++"""
++JASPAR Adapter for BioCypher.
++
++Loads JASPAR CORE vertebrate transcription factor binding profiles and generates:
++- TFBindingProfile nodes (transcription factor binding matrices)
++
++JASPAR is the open-access database of curated, non-redundant transcription
++factor (TF) binding profiles stored as position frequency matrices (PFMs).
++"""
++
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class JASPARAdapter:
++    def __init__(self, data_dir="template_package/data/jaspar"):
++        self.data_dir = Path(data_dir)
++        self.profiles = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load JASPAR TF binding profiles."""
++        path = self.data_dir / 'jaspar_core_vertebrates.json'
++        if not path.exists():
++            logger.warning("JASPAR: profile data not found")
++            return
++
++        logger.info("JASPAR: Loading TF binding profiles...")
++
++        with open(path, 'r', encoding='utf-8') as f:
++            data = json.load(f)
++
++        results = data.get('results', [])
++        seen = set()
++
++        for entry in results:
++            matrix_id = entry.get('matrix_id', '')
++            name = entry.get('name', '')
++            base_id = entry.get('base_id', '')
++            version = entry.get('version', '')
++            collection = entry.get('collection', '')
++
++            if not matrix_id or matrix_id in seen:
++                continue
++            seen.add(matrix_id)
++
++            self.profiles.append({
++                'matrix_id': matrix_id,
++                'name': name,
++                'base_id': base_id,
++                'version': version,
++                'collection': collection,
++            })
++
++        logger.info(f"JASPAR: Loaded {len(self.profiles)} TF binding profiles")
++
++    def get_nodes(self):
++        """
++        Generate TFBindingProfile nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("JASPAR: Generating nodes...")
++        count = 0
++
++        for profile in self.profiles:
++            props = {
++                'name': self._sanitize(profile['name']),
++                'base_id': profile['base_id'],
++                'version': profile['version'],
++                'collection': profile['collection'],
++                'source': 'JASPAR',
++            }
++
++            yield (f"JASPAR:{profile['matrix_id']}", "TFBindingProfile", props)
++            count += 1
++
++        logger.info(f"JASPAR: Generated {count} TFBindingProfile nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("JASPAR: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/modomics_adapter.py b/template_package/adapters/modomics_adapter.py
+new file mode 100644
+index 0000000..f5619b1
+--- /dev/null
++++ b/template_package/adapters/modomics_adapter.py
+@@ -0,0 +1,83 @@
++"""
++MODOMICS Adapter for BioCypher.
++
++Loads MODOMICS RNA modification data and generates:
++- RNAModification nodes (known RNA nucleoside modifications)
++
++MODOMICS is a database of RNA modification pathways, providing
++information on modified nucleosides found in RNA.
++"""
++
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class MODOMICSAdapter:
++    def __init__(self, data_dir="template_package/data/modomics"):
++        self.data_dir = Path(data_dir)
++        self.modifications = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load MODOMICS modification data."""
++        path = self.data_dir / 'modifications.json'
++        if not path.exists():
++            logger.warning("MODOMICS: modification data not found")
++            return
++
++        logger.info("MODOMICS: Loading RNA modifications...")
++
++        with open(path, 'r', encoding='utf-8') as f:
++            data = json.load(f)
++
++        # Data is a dict keyed by ID
++        for mod_id, mod in data.items():
++            if isinstance(mod, dict):
++                self.modifications.append({
++                    'id': mod.get('id', mod_id),
++                    'name': mod.get('name', ''),
++                    'short_name': mod.get('short_name', ''),
++                    'formula': mod.get('formula', ''),
++                    'mass_avg': mod.get('mass_avg', 0),
++                    'mass_monoiso': mod.get('mass_monoiso', 0),
++                    'reference_moiety': ';'.join(mod.get('reference_moiety', [])) if isinstance(mod.get('reference_moiety'), list) else str(mod.get('reference_moiety', '')),
++                })
++
++        logger.info(f"MODOMICS: Loaded {len(self.modifications)} RNA modifications")
++
++    def get_nodes(self):
++        """
++        Generate RNAModification nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("MODOMICS: Generating nodes...")
++        count = 0
++
++        for mod in self.modifications:
++            props = {
++                'name': self._sanitize(mod['name']),
++                'short_name': mod['short_name'],
++                'formula': mod['formula'],
++                'mass_avg': mod['mass_avg'],
++                'reference_moiety': mod['reference_moiety'],
++                'source': 'MODOMICS',
++            }
++
++            yield (f"MODOMICS:{mod['id']}", "RNAModification", props)
++            count += 1
++
++        logger.info(f"MODOMICS: Generated {count} RNAModification nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("MODOMICS: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/opm_adapter.py b/template_package/adapters/opm_adapter.py
+new file mode 100644
+index 0000000..6fb3295
+--- /dev/null
++++ b/template_package/adapters/opm_adapter.py
+@@ -0,0 +1,106 @@
++"""
++OPM Adapter for BioCypher.
++
++Loads OPM (Orientations of Proteins in Membranes) data and generates:
++- MembraneOrientation edges (protein → membrane orientation with tilt/thickness)
++
++OPM provides spatial positions of membrane proteins relative to the lipid
++bilayer, including tilt angle and membrane thickness.
++"""
++
++import json
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class OPMAdapter:
++    def __init__(self, data_dir="template_package/data/opm"):
++        self.data_dir = Path(data_dir)
++        self.structures = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load OPM membrane protein orientation data."""
++        logger.info("OPM: Loading membrane protein orientations...")
++        count = 0
++
++        for fname in sorted(self.data_dir.glob('opm_structures*.json')):
++            try:
++                with open(fname, 'r', encoding='utf-8') as f:
++                    data = json.load(f)
++
++                objects = data.get('objects', [])
++                for obj in objects:
++                    pdbid = obj.get('pdbid', '')
++                    if not pdbid:
++                        continue
++
++                    self.structures.append({
++                        'pdbid': pdbid,
++                        'name': obj.get('name', ''),
++                        'thickness': obj.get('thickness', 0),
++                        'tilt': obj.get('tilt', 0),
++                        'gibbs': obj.get('gibbs', 0),
++                        'resolution': obj.get('resolution', ''),
++                        'subunit_segments': obj.get('subunit_segments', 0),
++                        'family_name': obj.get('family_name_cache', ''),
++                        'species_name': obj.get('species_name_cache', ''),
++                        'membrane_name': obj.get('membrane_name_cache', ''),
++                    })
++                    count += 1
++            except (json.JSONDecodeError, KeyError) as e:
++                logger.warning(f"OPM: Error loading {fname.name}: {e}")
++
++        logger.info(f"OPM: Loaded {count} membrane protein structures")
++
++    def get_nodes(self):
++        """No new nodes."""
++        logger.info("OPM: No new nodes")
++        return iter([])
++
++    def get_edges(self):
++        """
++        Generate MembraneOrientation edges.
++        Yields: (id, source, target, label, properties)
++        """
++        logger.info("OPM: Generating edges...")
++        seen = set()
++        count = 0
++
++        for struct in self.structures:
++            pdbid = struct['pdbid']
++            if pdbid in seen:
++                continue
++            seen.add(pdbid)
++
++            props = {
++                'name': self._sanitize(struct['name']),
++                'thickness': struct['thickness'],
++                'tilt': struct['tilt'],
++                'gibbs_energy': struct['gibbs'],
++                'resolution': struct['resolution'],
++                'subunit_segments': struct['subunit_segments'],
++                'family_name': self._sanitize(struct['family_name']),
++                'species': self._sanitize(struct['species_name']),
++                'membrane_type': self._sanitize(struct['membrane_name']),
++                'source': 'OPM',
++            }
++
++            yield (
++                None,
++                f"PDB:{pdbid}",
++                struct['membrane_name'],
++                "MembraneOrientation",
++                props
++            )
++            count += 1
++
++        logger.info(f"OPM: Generated {count} MembraneOrientation edges")
+diff --git a/template_package/adapters/polyasite_adapter.py b/template_package/adapters/polyasite_adapter.py
+new file mode 100644
+index 0000000..c53d9f9
+--- /dev/null
++++ b/template_package/adapters/polyasite_adapter.py
+@@ -0,0 +1,120 @@
++"""
++PolyASite Adapter for BioCypher.
++
++Loads PolyASite 2.0 polyadenylation site clusters and generates:
++- PolyASite nodes (polyadenylation site clusters with tissue expression)
++
++PolyASite provides a comprehensive atlas of polyadenylation sites
++across human tissues, mapped from 3' end sequencing data.
++"""
++
++import gzip
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class PolyASiteAdapter:
++    def __init__(self, data_dir="template_package/data/polyasite"):
++        self.data_dir = Path(data_dir)
++        self.sites = []
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load PolyASite cluster data."""
++        path = self.data_dir / 'polyasite_human.tsv.gz'
++        if not path.exists():
++            logger.warning("PolyASite: data file not found")
++            return
++
++        logger.info("PolyASite: Loading polyadenylation site clusters...")
++        count = 0
++
++        with gzip.open(path, 'rt', encoding='utf-8') as f:
++            header = None
++            for line in f:
++                parts = line.strip().split('\t')
++
++                if header is None:
++                    header = parts
++                    continue
++
++                if len(parts) < 11:
++                    continue
++
++                chrom = parts[0]
++                start = parts[1]
++                end = parts[2]
++                name = parts[3]
++                score = parts[4]
++                strand = parts[5]
++                rep_site = parts[6]
++                frac_samples = parts[7]
++                nr_prots = parts[8]
++                annotation = parts[9]
++                gene_name = parts[10]
++
++                try:
++                    start_int = int(start)
++                    end_int = int(end)
++                    score_float = float(score)
++                except ValueError:
++                    continue
++
++                self.sites.append({
++                    'name': name,
++                    'chromosome': chrom,
++                    'start': start_int,
++                    'end': end_int,
++                    'strand': strand,
++                    'score': score_float,
++                    'representative_site': rep_site,
++                    'fraction_samples': frac_samples,
++                    'num_protocols': nr_prots,
++                    'annotation': annotation,
++                    'gene_name': gene_name,
++                })
++                count += 1
++
++                if count >= 500000:
++                    break
++
++        logger.info(f"PolyASite: Loaded {count} polyadenylation site clusters")
++
++    def get_nodes(self):
++        """
++        Generate PolyASite nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("PolyASite: Generating nodes...")
++        count = 0
++
++        for site in self.sites:
++            props = {
++                'chromosome': site['chromosome'],
++                'start': site['start'],
++                'end': site['end'],
++                'strand': site['strand'],
++                'score': site['score'],
++                'annotation': site['annotation'],
++                'gene_name': self._sanitize(site['gene_name']),
++                'num_protocols': site['num_protocols'],
++                'source': 'PolyASite',
++            }
++
++            yield (f"PAS:{site['name']}", "PolyACluster", props)
++            count += 1
++
++        logger.info(f"PolyASite: Generated {count} PolyACluster nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("PolyASite: No edges to generate")
++        return iter([])
+diff --git a/template_package/adapters/rnacentral_adapter.py b/template_package/adapters/rnacentral_adapter.py
+new file mode 100644
+index 0000000..e7a3213
+--- /dev/null
++++ b/template_package/adapters/rnacentral_adapter.py
+@@ -0,0 +1,127 @@
++"""
++RNAcentral Adapter for BioCypher.
++
++Loads RNAcentral human ncRNA cross-reference mappings and generates:
++- NcRNA nodes (non-coding RNA entities with cross-database mappings)
++
++RNAcentral is a comprehensive database of non-coding RNA sequences
++that provides a unified identifier space across ncRNA databases.
++"""
++
++from pathlib import Path
++from biocypher._logger import logger
++
++
++class RNAcentralAdapter:
++    def __init__(self, data_dir="template_package/data/rnacentral"):
++        self.data_dir = Path(data_dir)
++        self.ncrnas = {}
++        self._load_data()
++
++    def _sanitize(self, text):
++        if text is None:
++            return ""
++        text = str(text)
++        text = text.replace('"', '""')
++        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
++        return text.strip()
++
++    def _load_data(self):
++        """Load RNAcentral HGNC mappings for human ncRNAs."""
++        path = self.data_dir / 'hgnc_mappings.tsv'
++        if not path.exists():
++            logger.warning("RNAcentral: HGNC mappings not found")
++            return
++
++        logger.info("RNAcentral: Loading HGNC ncRNA mappings...")
++        count = 0
++
++        with open(path, 'r', encoding='utf-8') as f:
++            for line in f:
++                parts = line.strip().split('\t')
++                if len(parts) < 6:
++                    continue
++
++                urs_id = parts[0].strip()
++                db = parts[1].strip()
++                ext_id = parts[2].strip()
++                taxon = parts[3].strip()
++                rna_type = parts[4].strip()
++                gene_name = parts[5].strip()
++
++                if taxon != '9606':
++                    continue
++
++                if urs_id not in self.ncrnas:
++                    self.ncrnas[urs_id] = {
++                        'urs_id': urs_id,
++                        'rna_type': rna_type,
++                        'gene_name': gene_name,
++                        'hgnc_id': ext_id,
++                        'databases': set(),
++                    }
++                self.ncrnas[urs_id]['databases'].add(db)
++                count += 1
++
++        # Also load miRBase mappings
++        mirbase_path = self.data_dir / 'mirbase_mappings.tsv'
++        if mirbase_path.exists():
++            logger.info("RNAcentral: Loading miRBase mappings...")
++            mir_count = 0
++            with open(mirbase_path, 'r', encoding='utf-8') as f:
++                for line in f:
++                    parts = line.strip().split('\t')
++                    if len(parts) < 6:
++                        continue
++
++                    urs_id = parts[0].strip()
++                    db = parts[1].strip()
++                    ext_id = parts[2].strip()
++                    taxon = parts[3].strip()
++                    rna_type = parts[4].strip()
++                    name = parts[5].strip()
++
++                    if taxon != '9606':
++                        continue
++
++                    if urs_id not in self.ncrnas:
++                        self.ncrnas[urs_id] = {
++                            'urs_id': urs_id,
++                            'rna_type': rna_type,
++                            'gene_name': name,
++                            'hgnc_id': '',
++                            'databases': set(),
++                        }
++                    self.ncrnas[urs_id]['databases'].add(db)
++                    mir_count += 1
++
++            logger.info(f"RNAcentral: Added {mir_count} miRBase entries")
++
++        logger.info(f"RNAcentral: Total {len(self.ncrnas)} unique human ncRNAs")
++
++    def get_nodes(self):
++        """
++        Generate NcRNA nodes.
++        Yields: (id, label, properties)
++        """
++        logger.info("RNAcentral: Generating nodes...")
++        count = 0
++
++        for urs_id, ncrna in self.ncrnas.items():
++            props = {
++                'gene_name': self._sanitize(ncrna['gene_name']),
++                'rna_type': ncrna['rna_type'],
++                'hgnc_id': ncrna['hgnc_id'],
++                'databases': ';'.join(sorted(ncrna['databases'])),
++                'source': 'RNAcentral',
++            }
++
++            yield (f"RNAcentral:{urs_id}", "NcRNA", props)
++            count += 1
++
++        logger.info(f"RNAcentral: Generated {count} NcRNA nodes")
++
++    def get_edges(self):
++        """No edges."""
++        logger.info("RNAcentral: No edges to generate")
++        return iter([])

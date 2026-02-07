@@ -12,6 +12,7 @@ subdirectories). DO NOT write outside or change anything persistent on this mach
 - The task is iterative; do not try to "solve everything at once."
 - Keep outputs concise; record state in persistent files, not in chat logs; save intermediate files in checkpoints; provide reports for subsequent iterations and for humans to read after the job is completed.
 - **AUTONOMOUS OPERATION**: This is an unattended overnight process. NEVER ask the user questions. Make all decisions autonomously and document your reasoning in memory.md. If there are multiple reasonable approaches, choose the most logical one based on the task context and prior learnings.
+- **CONTEXT MANAGEMENT**: You have a limited context window. Commit your work and update persistent state files (memory.md, progress.md, todo.md) frequently — at least every 15-20 minutes. Focus on completing 3-5 databases per session rather than trying to do everything at once. When you notice your context getting large, wrap up the current task, commit, update state files, and exit cleanly so the next iteration can continue.
 
 ## Inputs and persistent state
 - Task spec and constraints: `task.md` (fixed, don't change)
