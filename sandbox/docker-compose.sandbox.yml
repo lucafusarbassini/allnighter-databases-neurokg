@@ -29,6 +29,8 @@ services:
       - ../:/project-source:ro
       # Persistent volume for agent logs (survives container restarts)
       - sandbox-logs:/agent-logs
+      # Persistent volume for workspace (survives container restarts/crashes)
+      - sandbox-workspace:/workspace
       # Mount Claude auth directory to temp location — entrypoint will copy it with proper perms
       - ${HOME}/.claude:/claude-source:ro
 
@@ -64,3 +66,4 @@ networks:
 volumes:
   sandbox-logs:
   sandbox-home:
+  sandbox-workspace:

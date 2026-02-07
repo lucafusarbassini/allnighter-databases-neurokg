@@ -138,4 +138,4 @@ template_package/data/
 
 # Sandbox secrets and artifacts
 sandbox/.env
-sandbox/patches/
+sandbox/patches/sandbox/backups/
